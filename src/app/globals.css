@@ -1,0 +1,365 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/* Dark mode is class-based so the user preference (light / dark / system) can be applied explicitly. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   FlowForge design tokens
+   Single source of truth. Documented in DESIGN_SYSTEM.md.
+   Every colour pair used for text is checked by scripts/check-contrast.mjs.
+   ========================================================================== */
+:root {
+  color-scheme: light;
+
+  /* Brand — "Ember": a forged-metal orange. 700 is used for text/fills on light surfaces. */
+  --ember-50: #fff4ed;
+  --ember-100: #ffe5d3;
+  --ember-200: #fec7a5;
+  --ember-300: #fda06d;
+  --ember-400: #fb7232;
+  --ember-500: #f0510c;
+  --ember-600: #d13f06;
+  --ember-700: #ad3209;
+  --ember-800: #8a2a0f;
+  --ember-900: #702510;
+
+  /* Secondary — "Ink": a blue-slate used for links, selection and the canvas grid. */
+  --ink-50: #f1f5fb;
+  --ink-100: #e1e9f5;
+  --ink-500: #4a6a9b;
+  --ink-600: #3a5683;
+  --ink-700: #2f456a;
+  --ink-800: #263854;
+
+  /* Neutral — warm graphite. */
+  --gray-0: #ffffff;
+  --gray-25: #fbfaf9;
+  --gray-50: #f6f5f3;
+  --gray-100: #eeece9;
+  --gray-200: #e2dfdb;
+  --gray-300: #cdc9c3;
+  --gray-400: #a29d96;
+  --gray-500: #78736c;
+  --gray-600: #5d5852;
+  --gray-700: #46423d;
+  --gray-800: #2c2926;
+  --gray-900: #1b1917;
+  --gray-950: #121110;
+
+  /* Semantic: light theme */
+  --background: var(--gray-25);
+  --surface: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+  --surface-raised: var(--gray-0);
+  --surface-hover: var(--gray-50);
+  --border: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --input-border: #8f8a83; /* 3:1+ against surface for WCAG 1.4.11 */
+
+  --text: var(--gray-900);
+  --text-muted: var(--gray-600);
+  --text-subtle: #6b665f;
+  --text-disabled: #9a958e;
+  --text-inverse: #ffffff;
+
+  --primary: var(--ember-700);
+  --primary-hover: var(--ember-800);
+  --primary-fg: #ffffff;
+  --primary-soft: var(--ember-50);
+  --primary-soft-fg: var(--ember-800);
+  --primary-border: var(--ember-200);
+
+  --secondary: var(--ink-700);
+  --secondary-soft: var(--ink-50);
+  --secondary-soft-fg: var(--ink-800);
+  --link: var(--ink-600);
+
+  --success: #1d7a3d;
+  --success-soft: #eaf6ee;
+  --success-fg: #155c2e;
+  --success-border: #b6dfc3;
+  --warning: #a35a00;
+  --warning-soft: #fdf3e2;
+  --warning-fg: #7c4400;
+  --warning-border: #f0d29c;
+  --danger: #b42318;
+  --danger-hover: #912018;
+  --danger-soft: #fdeeec;
+  --danger-fg: #8e1d14;
+  --danger-border: #f4c1bb;
+  --info: #2459b8;
+  --info-soft: #ebf1fc;
+  --info-fg: #1c468f;
+  --info-border: #bcd0f2;
+  --neutral-soft: var(--gray-100);
+  --neutral-fg: var(--gray-700);
+
+  --focus-ring: #2459b8;
+  --overlay: rgb(18 17 16 / 0.48);
+
+  --canvas-bg: var(--gray-50);
+  --canvas-dot: #c9c4bd;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 1px rgb(27 25 23 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(27 25 23 / 0.06), 0 1px 1px rgb(27 25 23 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(27 25 23 / 0.10), 0 2px 4px -2px rgb(27 25 23 / 0.06);
+  --shadow-lg: 0 16px 32px -8px rgb(27 25 23 / 0.18), 0 4px 8px -4px rgb(27 25 23 / 0.08);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #121110;
+  --surface: #191816;
+  --surface-sunken: #141312;
+  --surface-raised: #1f1d1b;
+  --surface-hover: #24221f;
+  --border: #2f2c29;
+  --border-strong: #3d3935;
+  --input-border: #7a746d;
+
+  --text: #f3f1ee;
+  --text-muted: #b7b1aa;
+  --text-subtle: #a19b93;
+  --text-disabled: #6e6963;
+  --text-inverse: #121110;
+
+  --primary: #fb8a4c;
+  --primary-hover: #fda06d;
+  --primary-fg: #1b1917;
+  --primary-soft: #33190c;
+  --primary-soft-fg: #fdb58c;
+  --primary-border: #6a2c10;
+
+  --secondary: #9db7e0;
+  --secondary-soft: #1a2333;
+  --secondary-soft-fg: #b9cdec;
+  --link: #9fbcef;
+
+  --success: #4cc77a;
+  --success-soft: #11291a;
+  --success-fg: #7fdba1;
+  --success-border: #1f4d30;
+  --warning: #f0b14a;
+  --warning-soft: #2e2010;
+  --warning-fg: #f5c97c;
+  --warning-border: #5a3d12;
+  --danger: #f6735f;
+  --danger-hover: #f88f7f;
+  --danger-soft: #34140f;
+  --danger-fg: #f9a294;
+  --danger-border: #6a2419;
+  --info: #79a6f2;
+  --info-soft: #121f36;
+  --info-fg: #a7c4f6;
+  --info-border: #24406e;
+  --neutral-soft: #2a2724;
+  --neutral-fg: #d4cfc9;
+
+  --focus-ring: #8db4f7;
+  --overlay: rgb(0 0 0 / 0.62);
+
+  --canvas-bg: #151412;
+  --canvas-dot: #34302c;
+
+  --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 32px -8px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input-border: var(--input-border);
+  --color-fg: var(--text);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-subtle: var(--text-subtle);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-inverse: var(--text-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-fg: var(--primary-soft-fg);
+  --color-primary-border: var(--primary-border);
+  --color-secondary: var(--secondary);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-secondary-soft-fg: var(--secondary-soft-fg);
+  --color-link: var(--link);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-fg: var(--success-fg);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-fg: var(--info-fg);
+  --color-info-border: var(--info-border);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-neutral-fg: var(--neutral-fg);
+  --color-focus: var(--focus-ring);
+  --color-overlay: var(--overlay);
+
+  /* Type scale (rem @ 16px): 12 / 13 / 14 / 16 / 18 / 20 / 24 / 30 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+
+  /* Radius scale: 4 / 6 / 8 / 12 / full */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  /* Breakpoints match the product spec: 768 / 1024 / 1440 */
+  --breakpoint-sm: 30rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 90rem;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.15);
+  --animate-fade-in: fade-in 160ms var(--ease-standard);
+  --animate-slide-up: slide-up 200ms var(--ease-standard);
+  --animate-slide-in-right: slide-in-right 220ms var(--ease-standard);
+  --animate-slide-in-left: slide-in-left 220ms var(--ease-standard);
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--background);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    font-feature-settings: "ss01", "cv11";
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  ::selection {
+    background: var(--secondary-soft);
+    color: var(--text);
+  }
+  .dark ::selection {
+    background: #2a3b58;
+  }
+  code, kbd, pre, samp {
+    font-family: var(--font-mono);
+  }
+  [hidden] { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- React Flow theming (keeps the canvas on our tokens) ---------- */
+.react-flow {
+  --xy-background-color: var(--canvas-bg);
+  --xy-edge-stroke: var(--gray-500);
+  --xy-edge-stroke-selected: var(--primary);
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: var(--primary);
+  --xy-handle-background-color: var(--surface);
+  --xy-handle-border-color: var(--input-border);
+  --xy-controls-button-background-color: var(--surface);
+  --xy-controls-button-background-color-hover: var(--surface-hover);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-minimap-background-color: var(--surface);
+  --xy-minimap-mask-background-color: rgb(120 115 108 / 0.18);
+  --xy-attribution-background-color: transparent;
+  --xy-selection-background-color: rgb(36 89 184 / 0.08);
+  --xy-selection-border: 1px dashed var(--focus-ring);
+}
+.dark .react-flow {
+  --xy-edge-stroke: #8b857e;
+}
+.react-flow__node:focus-visible {
+  outline: none;
+}
+.react-flow__node:focus-visible > .ff-node {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+.react-flow__handle.connectingto,
+.react-flow__handle.valid {
+  background: var(--primary);
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.5;
+}
+.react-flow__controls-button svg { fill: currentColor; }
+
+/* Tabular figures for metrics, durations and timestamps */
+.tabular { font-variant-numeric: tabular-nums; }
