@@ -133,7 +133,7 @@ export function ManageConnection({ connectionId }: { connectionId: string }) {
       <PageHeader breadcrumbs={[{ label: "Integrations", href: "/integrations" }, { label: integration.name, href: `/integrations/${integration.id}` }, { label: c.displayName }]}
         title={c.displayName} meta={<StatusBadge meta={CONNECTION_STATUS_META[c.status]} />}
         actions={c.status !== "revoked" && <>
-          <Button variant="outline" onClick={() => test.mutate()} loading={test.isPending} loadingText="Testing…"><PlugZap aria-hidden /> Test connection</Button>
+          {manage && <Button variant="outline" onClick={() => test.mutate()} loading={test.isPending} loadingText="Testing…"><PlugZap aria-hidden /> Test connection</Button>}
           {manage && <Button variant="outline" onClick={() => setRotateOpen(true)}><KeyRound aria-hidden /> Rotate credential</Button>}
           {manage && <Button variant="destructive-outline" onClick={() => setRevokeOpen(true)}><Ban aria-hidden /> Revoke</Button>}
         </>}

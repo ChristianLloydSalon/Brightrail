@@ -8,7 +8,7 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const missing = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).filter((name) => !existsSync(join(root, "node_modules", ...name.split("/"), "package.json")));
 
 if (missing.length) {
-  console.error(`\n  FlowForge: ${missing.length} package(s) aren't installed (${missing.slice(0, 4).join(", ")}${missing.length > 4 ? ", …" : ""}).`);
+  console.error(`\n  Brightrail: ${missing.length} package(s) aren't installed (${missing.slice(0, 4).join(", ")}${missing.length > 4 ? ", …" : ""}).`);
   console.error("  Run this in the project folder, then try again:\n\n    npm install\n");
   process.exit(1);
 }

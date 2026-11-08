@@ -34,7 +34,7 @@ export function IntegrationDirectory() {
   const q = useQuery({ queryKey: ["integrations", ws, debounced, category], queryFn: () => integrationsApi.list({ search: debounced, category }) });
   return (
     <PageContainer>
-      <PageHeader title="Integrations" description="Built-in connectors and the generic HTTP connector. Credentials are stored in the secret manager; FlowForge keeps only a reference."
+      <PageHeader title="Integrations" description="Built-in connectors and the generic HTTP connector. Credentials are stored in the secret manager; Brightrail keeps only a reference."
         actions={<Button asChild variant="outline"><Link href="/integrations/webhooks">Manage webhooks</Link></Button>} />
       <Tabs value={category} onValueChange={(v) => setCategory(v as IntegrationCategory | "all")}>
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">

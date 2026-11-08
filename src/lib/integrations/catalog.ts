@@ -31,7 +31,7 @@ export const INTEGRATIONS: Integration[] = [
   {
     id: "int_webhook",
     name: "Signed Webhooks",
-    vendor: "FlowForge",
+    vendor: "Brightrail",
     category: "Core",
     summary: "Start workflows when another system sends an event.",
     description:
@@ -41,7 +41,7 @@ export const INTEGRATIONS: Integration[] = [
     configFields: [],
     actions: [],
     docs: [
-      "Headers: X-FlowForge-Timestamp (unix seconds), X-FlowForge-Signature (sha256=<hex>), optional X-FlowForge-Event-Id.",
+      "Headers: X-Brightrail-Timestamp (unix seconds), X-Brightrail-Signature (sha256=<hex>), optional X-Brightrail-Event-Id.",
       "Signature = HMAC_SHA256(signing_secret, timestamp + \".\" + raw_body).",
     ],
   },
@@ -91,7 +91,7 @@ export const INTEGRATIONS: Integration[] = [
     availability: "available",
     authType: "api_key",
     configFields: [
-      { key: "fromAddress", label: "From address", type: "text", required: true, placeholder: "FlowForge <onboarding@resend.dev>" },
+      { key: "fromAddress", label: "From address", type: "text", required: true, placeholder: "Brightrail <onboarding@resend.dev>" },
       { key: "apiKey", label: "Resend API key", type: "secret", required: true, placeholder: "re_…" },
     ],
     actions: [
@@ -127,7 +127,7 @@ export const INTEGRATIONS: Integration[] = [
     availability: "available",
     authType: "api_key",
     configFields: [
-      { key: "channel", label: "Channel name", type: "text", required: true, placeholder: "Ops alerts", help: "Only used as a label in FlowForge." },
+      { key: "channel", label: "Channel name", type: "text", required: true, placeholder: "Ops alerts", help: "Only used as a label in Brightrail." },
       { key: "webhookUrl", label: "Workflow webhook URL", type: "secret", required: true, placeholder: "https://…logic.azure.com/workflows/…", help: "Teams → channel ••• → Workflows → “Post to a channel when a webhook request is received” → copy the URL." },
     ],
     actions: [
@@ -170,12 +170,12 @@ export const INTEGRATIONS: Integration[] = [
     actions: [
       { key: "airtable.create_record", name: "Create record", description: "Add one record. In the input mapping, Field is an Airtable field name.", idempotent: false, retryable: true, timeoutSec: 15, scopes: ["data.records:write"], sensitiveFields: [], outputFields: ["recordId"] },
     ],
-    docs: ["Field names must match the table exactly (case-sensitive).", "The free plan allows 5 requests per second per base; FlowForge retries if it's rate-limited."],
+    docs: ["Field names must match the table exactly (case-sensitive).", "The free plan allows 5 requests per second per base; Brightrail retries if it's rate-limited."],
   },
   {
     id: "int_schedule",
     name: "Schedule trigger",
-    vendor: "FlowForge",
+    vendor: "Brightrail",
     category: "Core",
     summary: "Start workflows on a schedule.",
     description: "Run a workflow every few minutes or hours, daily, on chosen weekdays, monthly, or on any cron expression — in the time zone you pick. Choose “On a schedule” in a workflow's trigger step, then publish.",

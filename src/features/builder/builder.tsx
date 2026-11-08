@@ -35,8 +35,8 @@ import { FlowNodeCard, KindIcon, type FlowNodeData } from "./node-card";
 import { NodeConfigPanel } from "./node-config";
 import { canConnect, editorReducer, orderedNodes, type EditorState } from "./state";
 
-const nodeTypes = { ff: FlowNodeCard };
-const DND_MIME = "application/x-flowforge-node";
+const nodeTypes = { step: FlowNodeCard };
+const DND_MIME = "application/x-brightrail-node";
 
 function useMedia(q: string) {
   const [m, setM] = React.useState(false);
@@ -272,7 +272,7 @@ function BuilderInner({ id }: { id: string }) {
   const rfNodes: Node<FlowNodeData>[] = React.useMemo(() => def.nodes.map((n) => {
     const { errors, warnings } = issueCount(n.id);
     return {
-      id: n.id, type: "ff", position: n.position, selected: n.id === selected, draggable: !readOnly,
+      id: n.id, type: "step", position: n.position, selected: n.id === selected, draggable: !readOnly,
       ...(sizes[n.id] ? { measured: sizes[n.id] } : {}),
       data: { node: n, readOnly, errors, warnings },
       ariaLabel: `${NODE_META[n.kind].label} step: ${n.label}. ${summarizeNode(n)}.${errors ? ` ${errors} errors.` : ""} Press Enter to configure.`,

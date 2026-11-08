@@ -1,4 +1,4 @@
--- FlowForge: schedule trigger, run-history retention, per-person notification preferences.
+-- Brightrail: schedule trigger, run-history retention, per-person notification preferences.
 -- Run AFTER 0001–0003. Safe to run more than once.
 
 -- ---------------------------------------------------------------- schedules

@@ -66,7 +66,7 @@ export function PlanUsageView() {
             );
           })}
         </div>
-        <p className="text-sm text-fg-muted">Plans only set limits inside FlowForge; switching doesn't charge anything. Your hosting providers' own free tiers (Supabase, Inngest, Vercel) still apply.</p>
+        <p className="text-sm text-fg-muted">Plans only set limits inside Brightrail; switching doesn't charge anything. Your hosting providers' own free tiers (Supabase, Inngest, Vercel) still apply.</p>
       </div>
       <ConfirmDialog open={!!target} onOpenChange={(o) => !o && setTarget(null)} loading={change.isPending} onConfirm={() => { if (target) change.mutate(target); }}
         title={`Switch to ${t?.name}?`} confirmLabel={`Switch to ${t?.name}`}

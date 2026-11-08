@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { appHost } from "@/lib/utils";
 import { useOnChange } from "@/hooks/use-on-change";
 import { planName } from "@/lib/domain/plans";
 import Link from "next/link";
@@ -62,7 +63,7 @@ export function WorkspaceSettingsView() {
           <Panel aria-labelledby="gen-h"><PanelHeader id="gen-h" title="General" />
             <PanelBody className="grid gap-4 sm:grid-cols-2">
               <Field id="ws-name" label="Workspace name" required error={errors.name}>{(p) => <Input {...p} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-              <Field id="ws-slug" label="Workspace URL" required error={errors.slug} description={`flowforge.app/${slug || "…"}`}>{(p) => <Input {...p} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} className="font-mono" />}</Field>
+              <Field id="ws-slug" label="Workspace URL" required error={errors.slug} description={`${appHost()}/${slug || "…"}`}>{(p) => <Input {...p} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} className="font-mono" />}</Field>
               <Field label="Time zone" description="Used for schedules and reports.">{(p) => <Select {...p} value={s.timezone} onValueChange={(v) => setS({ ...s, timezone: v })} options={[...new Set([s.timezone, ...TIMEZONES])].map((t) => ({ value: t, label: t.replace("_", " ") }))} />}</Field>
               <Field label="Plan" description={<Link href="/settings/plan" className="text-link hover:underline">See usage or change plan</Link>}>{(p) => <Input {...p} readOnly value={`${planName(q.data.plan)} · ${q.data.quotas.executionsPerMonth.toLocaleString()} runs/month`} />}</Field>
             </PanelBody>

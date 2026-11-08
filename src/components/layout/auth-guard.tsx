@@ -26,13 +26,13 @@ export function AuthGuard({ children, requireWorkspace = true }: { children: Rea
   if (error && !unauth)
     return (
       <div className="flex min-h-dvh items-center justify-center p-6">
-        <ErrorState title="FlowForge couldn't start" error={error} onRetry={() => window.location.reload()} />
+        <ErrorState title="Brightrail couldn't start" error={error} onRetry={() => window.location.reload()} />
         {error instanceof ApiError && error.code === "NOT_CONFIGURED" && <Button asChild variant="link"><a href="/setup">Open setup check</a></Button>}
       </div>
     );
   if (loading || unauth || needsWorkspace)
     return (
-      <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading FlowForge">
+      <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading Brightrail">
         <LogoMark className="size-9 animate-pulse motion-reduce:animate-none" />
       </div>
     );

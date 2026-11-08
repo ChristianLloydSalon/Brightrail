@@ -86,7 +86,7 @@ export async function act<T>(fn: () => Promise<T>): Promise<Result<T>> {
   } catch (e) {
     if (e instanceof ApiError) return { ok: false, error: e.toJSON() };
     if (e && typeof e === "object" && "digest" in e && String((e as { digest: string }).digest).startsWith("NEXT_")) throw e;
-    console.error("[flowforge] unexpected error", e);
+    console.error("[brightrail] unexpected error", e);
     return { ok: false, error: new ApiError("INTERNAL", "Something went wrong on our side. Try again in a moment.").toJSON() };
   }
 }
@@ -96,10 +96,10 @@ export async function act<T>(fn: () => Promise<T>): Promise<Result<T>> {
  * cause on a fresh install, so they get specific guidance; everything else is logged.
  */
 export function dbError(error: { code?: string; message: string }, what: string): ApiError {
-  console.error(`[flowforge] database error while trying to ${what}:`, error.code, error.message);
+  console.error(`[brightrail] database error while trying to ${what}:`, error.code, error.message);
   const m = error.message ?? "";
   if (error.code === "42501" || /permission denied/i.test(m))
-    return new ApiError("NOT_CONFIGURED", `Couldn't ${what}: the database hasn't granted FlowForge access to its tables. In Supabase → SQL Editor, run supabase/migrations/0003_grants.sql, then try again.`);
+    return new ApiError("NOT_CONFIGURED", `Couldn't ${what}: the database hasn't granted Brightrail access to its tables. In Supabase → SQL Editor, run supabase/migrations/0003_grants.sql, then try again.`);
   if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table|does not exist/i.test(m))
     return new ApiError("NOT_CONFIGURED", `Couldn't ${what}: the database tables don't exist yet. In Supabase → SQL Editor, run the files in supabase/migrations in order (0001, 0002, 0003).`);
   if (/invalid api key|no api key|jwt|jws/i.test(m))

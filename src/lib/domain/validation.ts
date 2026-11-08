@@ -207,6 +207,8 @@ function validateNode(
       else {
         const check = checkOutboundUrl(c.url);
         if (!check.ok) add({ severity: "error", code: "UNSAFE_URL", nodeId: n.id, field: "url", message: `${n.label}: ${check.reason}` });
+        else if (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*\{\{/i.test(c.url.trim()))
+          add({ severity: "error", code: "UNSAFE_URL", nodeId: n.id, field: "url", message: `${n.label}: The host must be written out literally. Use {{fields}} only in the path or query.` });
       }
       if (c.timeoutSec < 1 || c.timeoutSec > 120)
         add({ severity: "error", code: "RANGE", nodeId: n.id, field: "timeoutSec", message: `${n.label}: Timeout must be between 1 and 120 seconds.` });
@@ -227,7 +229,7 @@ function validateNode(
       }
       if (c.method !== "GET" && !c.useIdempotencyKey)
         add({ severity: "warning", code: "NO_IDEMPOTENCY", nodeId: n.id, field: "useIdempotencyKey", message: `${n.label}: Retries could repeat this ${c.method} without an idempotency key.` });
-      if (c.connectionId) checkConnection(n, c.connectionId, ctx, add);
+      if (c.connectionId) checkConnection(n, c.connectionId, "int_http", ctx, add);
       break;
     }
     case "action": {
@@ -242,7 +244,7 @@ function validateNode(
           add({ severity: "error", code: "ACTION", nodeId: n.id, field: "actionKey", message: `${n.label}: The selected action doesn't exist on ${integ.name}.` });
       }
       if (!c.connectionId) req("connectionId", "Connection");
-      else checkConnection(n, c.connectionId, ctx, add);
+      else checkConnection(n, c.connectionId, c.integrationId ?? "", ctx, add);
       for (const m of c.inputMapping)
         if (!m.field.trim() || !m.source.trim())
           add({ severity: "error", code: "MAPPING", nodeId: n.id, field: "inputMapping", message: `${n.label}: Complete or remove empty input mappings.` });
@@ -302,11 +304,14 @@ function validateNode(
 function checkConnection(
   n: WorkflowNode,
   connectionId: string,
+  expectedIntegrationId: string,
   ctx: ValidationContext,
   add: (i: Omit<ValidationIssue, "id">) => void,
 ) {
   const conn = ctx.connections.find((c) => c.id === connectionId);
   if (!conn) add({ severity: "error", code: "CONNECTION", nodeId: n.id, field: "connectionId", message: `${n.label}: The selected connection no longer exists.` });
+  else if (conn.integrationId !== expectedIntegrationId)
+    add({ severity: "error", code: "CONNECTION_TYPE", nodeId: n.id, field: "connectionId", message: `${n.label}: “${conn.displayName}” can't be used for this step. Choose a connection of the matching type.` });
   else if (conn.status === "revoked")
     add({ severity: "error", code: "CONNECTION", nodeId: n.id, field: "connectionId", message: `${n.label}: “${conn.displayName}” has been revoked.` });
   else if (conn.status === "error")

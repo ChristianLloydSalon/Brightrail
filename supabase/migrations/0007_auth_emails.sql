@@ -1,4 +1,4 @@
--- FlowForge: rate limits for sign-up, password-reset and invitation emails sent through Resend.
+-- Brightrail: rate limits for sign-up, password-reset and invitation emails sent through Resend.
 -- Run AFTER 0001–0006. Safe to run more than once.
 
 create table if not exists public.auth_email_windows (

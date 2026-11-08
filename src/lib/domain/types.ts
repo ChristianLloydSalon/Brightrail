@@ -1,5 +1,5 @@
 /**
- * FlowForge domain model.
+ * Brightrail domain model.
  * Mirrors the entities in spec §09 (Data model). Field names are camelCase on the client;
  * the API layer is responsible for mapping to snake_case columns.
  */
@@ -461,6 +461,8 @@ export interface WebhookEndpoint {
   rateLimitPerMin: number;
   /** "hmac": senders sign each request (developers). "url_key": the secret is part of the URL (form tools, no-code apps). */
   verification: "hmac" | "url_key";
+  /** Secret-link mode only: accept the key only in the X-Brightrail-Key header, never in the URL. */
+  headerKeyOnly: boolean;
   createdAt: ISODate;
   rotatedAt?: ISODate;
 }
@@ -471,7 +473,7 @@ export interface WebhookDelivery {
   endpointId: ID;
   receivedAt: ISODate;
   eventId: string;
-  status: "accepted" | "duplicate" | "rejected_signature" | "rejected_replay" | "rejected_size" | "rejected_rate";
+  status: "accepted" | "duplicate" | "rejected_signature" | "rejected_replay" | "rejected_size" | "rejected_rate" | "not_started";
   httpStatus: number;
   bytes: number;
   runId?: ID;

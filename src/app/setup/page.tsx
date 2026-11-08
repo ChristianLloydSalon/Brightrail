@@ -16,14 +16,14 @@ export default async function SetupPage() {
     ["NEXT_PUBLIC_SUPABASE_URL", "Supabase project URL"],
     ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "Supabase anon (public) key"],
     ["SUPABASE_SERVICE_ROLE_KEY", "Supabase service-role key (server only)"],
-    ["FLOWFORGE_ENCRYPTION_KEY", "Encryption key for stored credentials"],
+    ["BRIGHTRAIL_ENCRYPTION_KEY", "Encryption key for stored credentials"],
     ["INNGEST_EVENT_KEY (or INNGEST_DEV=1 locally)", "Inngest workflow engine"],
   ];
   return (
     <main id="main" className="mx-auto flex min-h-dvh max-w-xl flex-col gap-6 px-5 py-10">
       <Logo />
       <div>
-        <h1 className="text-2xl font-semibold">{missing.length || dbBad ? "Finish setting up FlowForge" : "Setup complete"}</h1>
+        <h1 className="text-2xl font-semibold">{missing.length || dbBad ? "Finish setting up Brightrail" : "Setup complete"}</h1>
         <p className="mt-1 text-fg-muted">{missing.length ? "Add these values to your .env file, then restart the server. SETUP.md walks through each one." : dbBad ? "Your .env is complete. A few database steps are left." : "Everything required is configured."}</p>
       </div>
       <ul className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">

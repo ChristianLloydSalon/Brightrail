@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/feedback";
+import { safeLocalPath } from "@/lib/navigation";
 import { authApi, errorMessage } from "@/lib/services";
 import { PASSWORD_RULES, passwordStrength } from "@/lib/validators";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,7 @@ import { cn } from "@/lib/utils";
  */
 export function SocialButtons({ next = "/dashboard" }: { next?: string }) {
   const q = useQuery({ queryKey: ["auth-options"], queryFn: () => authApi.options(), staleTime: 60_000, retry: false });
-  const go = useMutation({ mutationFn: (p: "google" | "github") => authApi.signInWithProvider(p, next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard") });
+  const go = useMutation({ mutationFn: (p: "google" | "github") => authApi.signInWithProvider(p, safeLocalPath(next)) });
   const providers = (["google", "github"] as const).filter((p) => q.data?.[p]);
   if (!providers.length) return null;
   return (

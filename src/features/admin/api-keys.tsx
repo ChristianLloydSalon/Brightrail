@@ -47,7 +47,7 @@ export function ApiKeysView() {
   ];
   return (
     <PageContainer>
-      <PageHeader title="API keys" description="Workspace-scoped keys for the FlowForge REST API (/api/v1). Grant only the scopes a client needs." actions={<Button onClick={() => setCreateOpen(true)}><Plus aria-hidden /> Create API key</Button>} />
+      <PageHeader title="API keys" description="Workspace-scoped keys for the Brightrail REST API (/api/v1). Grant only the scopes a client needs." actions={<Button onClick={() => setCreateOpen(true)}><Plus aria-hidden /> Create API key</Button>} />
       <Panel>
         <DataTable caption="API keys" columns={cols} rows={q.data} getRowId={(k) => k.id} isLoading={q.isPending} error={q.isError ? q.error : undefined} onRetry={() => void q.refetch()}
           empty={<EmptyState icon={<KeyRound />} title="No API keys" description="Create a key to call the API from CI or another service." action={<Button onClick={() => setCreateOpen(true)}>Create API key</Button>} />}

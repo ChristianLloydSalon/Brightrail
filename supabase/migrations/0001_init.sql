@@ -1,6 +1,6 @@
--- FlowForge schema (spec §09). Run once in the Supabase SQL editor, or with `supabase db push`.
+-- Brightrail schema (spec §09). Run once in the Supabase SQL editor, or with `supabase db push`.
 -- Tenancy: every tenant row carries workspace_id. Members can READ their workspace's rows through
--- row-level security. All WRITES go through the FlowForge server, which checks roles in code and
+-- row-level security. All WRITES go through the Brightrail server, which checks roles in code and
 -- uses the service-role key. Secret material lives in tables with no policies at all.
 
 create extension if not exists pgcrypto;

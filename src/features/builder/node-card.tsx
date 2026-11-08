@@ -38,7 +38,7 @@ export const FlowNodeCard = React.memo(function FlowNodeCard({ data, selected }:
   return (
     <div
       className={cn(
-        "ff-node relative w-60 rounded-lg border bg-surface text-left shadow-sm transition-shadow",
+        "br-node relative w-60 rounded-lg border bg-surface text-left shadow-sm transition-shadow",
         selected ? "border-primary shadow-md ring-2 ring-primary/25" : "border-border-strong",
         errors > 0 && !selected && "border-danger",
       )}

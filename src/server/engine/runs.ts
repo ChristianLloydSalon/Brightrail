@@ -2,8 +2,8 @@ import "server-only";
 import { ApiError } from "@/lib/api-error";
 import { NODE_META, UNIT_SECONDS } from "@/lib/domain/nodes";
 import { redact } from "@/lib/domain/redaction";
-import type { JsonValue, LogEntry, StepRun, TriggerSource, WorkflowDefinition, WorkflowNode } from "@/lib/domain/types";
-import { backoffSeconds, idempotencyKey } from "@/lib/engine/logic";
+import type { JsonValue, LogEntry, StepRun, TriggerSource, WorkflowDefinition, WorkflowNode, WorkspaceSettings } from "@/lib/domain/types";
+import { backoffSeconds, idempotencyKey, runContextFrom } from "@/lib/engine/logic";
 import { uid } from "@/lib/utils";
 import { adminClient } from "../supabase";
 import { executeNode } from "./executors";
@@ -66,28 +66,38 @@ export async function startRun(p: {
   const { data: ver } = await db.from("workflow_versions").select("*").eq("id", p.workflow.current_version_id).single();
   if (!ver) throw new ApiError("CONFLICT", "The published version couldn't be found.");
   const def = ver.definition as WorkflowDefinition;
+  const minimal = await storesMinimalPayloads(p.workspaceId);
   const steps: StepRun[] = orderNodes(def).map((n) => ({ id: uid("step", 10), runId: "", nodeId: n.id, nodeLabel: n.label, nodeKind: n.kind, status: "pending", attempt: 0, attempts: [] }));
   const correlationId = uid("corr", 10);
   const { data: run, error } = await db
     .from("workflow_runs")
     .insert({
       workspace_id: p.workspaceId, workflow_id: p.workflow.id, workflow_name: p.workflow.name, workflow_version_id: ver.id, version: ver.version,
-      status: "queued", trigger: p.trigger, input: redact(p.input as JsonValue), correlation_id: correlationId, steps,
+      status: "queued", trigger: p.trigger, input: minimal ? {} : redact(p.input as JsonValue), correlation_id: correlationId, steps,
       logs: [log("info", `Run accepted from ${p.trigger.source} trigger; pinned to version ${ver.version}.`, undefined, { correlationId })],
     })
     .select("*")
     .single();
   if (error || !run) throw new ApiError("INTERNAL", "Couldn't create the run.");
   await db.from("workflow_runs").update({ steps: steps.map((s) => ({ ...s, runId: run.id })) }).eq("id", run.id);
-  await db.from("run_contexts").insert({ run_id: run.id, data: { trigger: p.input, ...p.input } });
+  await db.from("run_contexts").insert({ run_id: run.id, data: runContextFrom(p.input) });
   try {
     await inngest.send({ name: RUN_REQUESTED, data: { runId: run.id, pass: 0 } });
   } catch (e) {
     await db.from("workflow_runs").update({ status: "failed", ended_at: new Date().toISOString(), logs: [...run.logs, log("error", "The workflow worker couldn't be reached. Check the Inngest configuration (see SETUP.md).")] }).eq("id", run.id);
-    console.error("[flowforge] inngest.send failed", e);
+    console.error("[brightrail] inngest.send failed", e);
     throw new ApiError("NOT_CONFIGURED", "The run was created but the workflow worker couldn't be reached. Check INNGEST settings in .env.");
   }
   return run as RunRow;
+}
+
+/** Workspace setting "Store minimal metadata only": no input/output bodies in run history. */
+async function workspaceSettings(workspaceId: string): Promise<Partial<WorkspaceSettings>> {
+  const { data } = await adminClient().from("workspaces").select("settings").eq("id", workspaceId).maybeSingle();
+  return (data?.settings as Partial<WorkspaceSettings> | null) ?? {};
+}
+async function storesMinimalPayloads(workspaceId: string): Promise<boolean> {
+  return (await workspaceSettings(workspaceId)).payloadStorage === "minimal";
 }
 
 async function loadRun(runId: string) {
@@ -129,13 +139,15 @@ export async function runAttempt(runId: string, nodeId: string, maxAttempts: num
   await saveRun(runId, { status: "running", steps, logs });
 
   const res = await executeNode(node, data, { id: runId, workspaceId: run.workspace_id, scope });
+  const settings = await workspaceSettings(run.workspace_id);
+  const minimal = settings.payloadStorage === "minimal";
   const endedAt = new Date().toISOString();
   const current = step.attempts[step.attempts.length - 1]!;
   current.endedAt = endedAt;
-  step.input = res.input;
+  step.input = minimal ? undefined : res.input;
   if (res.ok) {
     current.status = "succeeded";
-    Object.assign(step, { status: "succeeded", endedAt, output: res.output, branch: res.branch, errorCode: undefined, errorMessage: undefined, errorClass: undefined });
+    Object.assign(step, { status: "succeeded", endedAt, output: minimal ? undefined : res.output, branch: res.branch, errorCode: undefined, errorMessage: undefined, errorClass: undefined });
     logs.push(log("info", `“${step.nodeLabel}” completed${res.branch ? ` — took the ${res.branch} branch` : ""}.`, step.id, { attempt: attemptNo }));
     await db.from("run_contexts").update({ data: res.data }).eq("run_id", runId);
     await saveRun(runId, { status: "running", steps, logs });
@@ -145,7 +157,9 @@ export async function runAttempt(runId: string, nodeId: string, maxAttempts: num
   Object.assign(current, { status: "failed", errorCode: f.code, errorMessage: f.message });
   Object.assign(step, { errorCode: f.code, errorMessage: f.message, errorClass: f.errorClass });
   if (f.retryable && attemptNo < maxAttempts) {
-    const wait = backoffSeconds(attemptNo);
+    // Backoff follows the workspace's default retry policy (Settings → Workspace).
+    const policy = settings.defaultRetry;
+    const wait = policy ? backoffSeconds(attemptNo, policy.initialIntervalSec, policy.backoffCoefficient, policy.maxIntervalSec) : backoffSeconds(attemptNo);
     step.status = "retrying";
     logs.push(log("warn", `“${step.nodeLabel}” attempt ${attemptNo} failed (${f.code}). Retrying in ${wait}s.`, step.id, { errorCode: f.code, backoffSeconds: wait }));
     await saveRun(runId, { status: "retrying", steps, logs });

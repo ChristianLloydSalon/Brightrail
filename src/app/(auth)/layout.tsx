@@ -29,15 +29,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       <div className="flex flex-col px-5 py-6 sm:px-10">
-        <Link href="/sign-in" className="w-fit rounded-sm" aria-label="FlowForge sign in">
+        <Link href="/sign-in" className="w-fit rounded-sm" aria-label="Brightrail sign in">
           <Logo />
         </Link>
         <main id="main" className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-[400px]">{children}</div>
         </main>
-        <p className="text-sm text-fg-subtle">Your data is stored in your FlowForge workspace and is never shared across workspaces.</p>
+        <p className="text-sm text-fg-subtle">Your data is stored in your Brightrail workspace and is never shared across workspaces.</p>
       </div>
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border bg-surface-sunken p-12 lg:flex" aria-label="About FlowForge">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border bg-surface-sunken p-12 lg:flex" aria-label="About Brightrail">
         <div className="max-w-md">
           <p className="text-sm font-medium tracking-wide text-primary uppercase">Durable automation</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance">Automate the process. Keep control when an integration fails.</h2>

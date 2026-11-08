@@ -162,7 +162,7 @@ export async function updateMeta(id: string, input: { name: string; description:
     const ctx = await getContext("workflows.edit");
     await findWorkflow(ctx, id);
     if (input.name.trim().length < 3) throw new ApiError("VALIDATION", "Check the highlighted fields.", { name: "Use at least 3 characters." });
-    const row = must(await ctx.db.from("workflows").update({ name: input.name.trim(), description: input.description.trim(), tags: input.tags, updated_at: ctx.now() }).eq("id", id).select("*").single());
+    const row = must(await ctx.db.from("workflows").update({ name: input.name.trim(), description: input.description.trim(), tags: input.tags, updated_at: ctx.now() }).eq("id", id).eq("workspace_id", ctx.workspace.id).select("*").single());
     await ctx.audit({ action: "workflow.updated", category: "workflow", resourceType: "workflow", resourceId: id, resourceName: row.name, metadata: {} });
     return toWorkflow(row);
   });
@@ -179,6 +179,7 @@ export async function saveDraft(id: string, definition: WorkflowDefinition, base
       .from("workflows")
       .update({ draft: definition, draft_revision: baseRevision + 1, draft_updated_at: now, updated_at: now })
       .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
       .eq("draft_revision", baseRevision)
       .select("draft_revision");
     if (!data?.length) throw new ApiError("CONFLICT", "Someone else saved this draft since you opened it. Reload to get their changes.");
@@ -200,7 +201,7 @@ async function armSchedule(workflowId: string) {
   try {
     await syncSchedule(workflowId);
   } catch (e) {
-    console.error("[flowforge] schedule sync failed; the hourly reconcile will retry", (e as Error).message);
+    console.error("[brightrail] schedule sync failed; the hourly reconcile will retry", (e as Error).message);
   }
 }
 
@@ -219,7 +220,7 @@ export async function publish(id: string, changeNote: string, expectedRevision: 
     if (current?.checksum === sum) throw new ApiError("CONFLICT", `The draft is identical to version ${current.version}. Make a change before publishing.`);
     const next = Math.max(0, ...(versions ?? []).map((v) => v.version as number)) + 1;
     const row = must(await ctx.db.from("workflow_versions").insert({ workspace_id: ctx.workspace.id, workflow_id: id, version: next, definition: wf.draft, checksum: sum, published_by: ctx.user.id, change_note: changeNote.trim() || `Version ${next}` }).select("*").single());
-    await ctx.db.from("workflows").update({ current_version_id: row.id, status: wf.status === "draft" ? "active" : wf.status, updated_at: ctx.now() }).eq("id", id);
+    await ctx.db.from("workflows").update({ current_version_id: row.id, status: wf.status === "draft" ? "active" : wf.status, updated_at: ctx.now() }).eq("id", id).eq("workspace_id", ctx.workspace.id);
     await ctx.audit({ action: "workflow.published", category: "workflow", resourceType: "workflow", resourceId: id, resourceName: wf.name, metadata: { version: next, checksum: sum } });
     await armSchedule(id);
     return toVersion(row);
@@ -232,7 +233,7 @@ export async function setStatus(id: string, status: "active" | "paused" | "archi
     const wf = toWorkflow(await findWorkflow(ctx, id));
     if (status === "active" && !wf.currentVersionId) throw new ApiError("CONFLICT", "Publish a version before activating this workflow.");
     if (wf.status === "archived") throw new ApiError("CONFLICT", "Archived workflows can't be changed.");
-    const row = must(await ctx.db.from("workflows").update({ status, updated_at: ctx.now() }).eq("id", id).select("*").single());
+    const row = must(await ctx.db.from("workflows").update({ status, updated_at: ctx.now() }).eq("id", id).eq("workspace_id", ctx.workspace.id).select("*").single());
     await ctx.audit({ action: status === "paused" ? "workflow.paused" : status === "archived" ? "workflow.archived" : "workflow.resumed", category: "workflow", resourceType: "workflow", resourceId: id, resourceName: wf.name, metadata: { from: wf.status, to: status } });
     await armSchedule(id);
     return toWorkflow(row);

@@ -41,7 +41,7 @@ export function ResetPasswordForm() {
 
   return (
     <>
-      <AuthHeading title={invited ? "Create your password" : "Choose a new password"} description={<>{invited ? "You've been invited to FlowForge. Set a password for " : "For "}<strong>{session.data.email}</strong></>} />
+      <AuthHeading title={invited ? "Create your password" : "Choose a new password"} description={<>{invited ? "You've been invited to Brightrail. Set a password for " : "For "}<strong>{session.data.email}</strong></>} />
       <form
         noValidate
         className="flex flex-col gap-4"

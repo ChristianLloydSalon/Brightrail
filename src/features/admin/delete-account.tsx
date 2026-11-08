@@ -30,7 +30,7 @@ export function DeleteAccountPanel() {
 
   return (
     <Panel aria-labelledby="del-h">
-      <PanelHeader id="del-h" title="Delete account" description="Permanently delete your FlowForge account and sign out everywhere." />
+      <PanelHeader id="del-h" title="Delete account" description="Permanently delete your Brightrail account and sign out everywhere." />
       <PanelBody className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-fg-muted">This can't be undone.</p>
         <Button variant="destructive" onClick={() => { setOpen(true); setConfirm(""); setErr(null); }}>Delete my account…</Button>

@@ -13,7 +13,7 @@ export const PLANS: Record<PlanId, Plan> = {
   free: {
     id: "free",
     name: "Free",
-    tagline: "For trying FlowForge and small personal automations.",
+    tagline: "For trying Brightrail and small personal automations.",
     quotas: { executionsPerMonth: 1000, members: 5, connections: 10 },
     features: ["1,000 runs per month", "Up to 5 members", "10 connections", "All connectors, schedules and the AI assistant", "30–90 days of run history"],
   },

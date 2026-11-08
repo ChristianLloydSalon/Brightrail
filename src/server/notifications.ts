@@ -35,14 +35,14 @@ export const NOTIFICATION_CREATED = "notification/created";
 export async function createNotification(n: { workspaceId: string; kind: AppNotification["kind"]; title: string; body: string; href: string }) {
   const { data, error } = await adminClient().from("notifications").insert({ workspace_id: n.workspaceId, kind: n.kind, title: n.title, body: n.body, href: n.href }).select("id").single();
   if (error || !data) {
-    console.error("[flowforge] couldn't create notification", error?.message);
+    console.error("[brightrail] couldn't create notification", error?.message);
     return;
   }
   if (!env.resendApiKey || !env.emailFrom) return;
   try {
     await inngest.send({ id: `notif-${data.id}`, name: NOTIFICATION_CREATED, data: { notificationId: data.id } });
   } catch (e) {
-    console.error("[flowforge] couldn't queue notification email", (e as Error).message);
+    console.error("[brightrail] couldn't queue notification email", (e as Error).message);
   }
 }
 
@@ -68,7 +68,7 @@ export const notificationEmailFunction = inngest.createFunction(
         .filter((m) => allowedFor(n.kind, m.role as Role, (ws?.grants ?? {}) as RoleGrants))
         .filter((m) => (prefsById.get(m.user_id) ?? DEFAULT_NOTIFICATION_PREFS)[pref].email)
         .map((m) => ({ userId: m.user_id as string, email: m.email as string }));
-      return { title: n.title as string, body: n.body as string, url: `${env.appUrl}${n.href}`, workspace: (ws?.name as string) ?? "FlowForge", to };
+      return { title: n.title as string, body: n.body as string, url: `${env.appUrl}${n.href}`, workspace: (ws?.name as string) ?? "Brightrail", to };
     });
     if (!plan) return { sent: 0 };
     let sent = 0;
@@ -81,8 +81,8 @@ export const notificationEmailFunction = inngest.createFunction(
             from: env.emailFrom,
             to: [r.email],
             subject: `[${plan.workspace}] ${plan.title}`,
-            text: `${plan.title}\n${plan.body}\n\nOpen in FlowForge: ${plan.url}\n\nYou can change which emails you get under Profile → Notifications.`,
-            html: `<p><strong>${esc(plan.title)}</strong><br>${esc(plan.body)}</p><p><a href="${esc(plan.url)}">Open in FlowForge</a></p><p style="color:#666;font-size:12px">You can change which emails you get under Profile → Notifications.</p>`,
+            text: `${plan.title}\n${plan.body}\n\nOpen in Brightrail: ${plan.url}\n\nYou can change which emails you get under Profile → Notifications.`,
+            html: `<p><strong>${esc(plan.title)}</strong><br>${esc(plan.body)}</p><p><a href="${esc(plan.url)}">Open in Brightrail</a></p><p style="color:#666;font-size:12px">You can change which emails you get under Profile → Notifications.</p>`,
           }),
           signal: AbortSignal.timeout(15_000),
         });

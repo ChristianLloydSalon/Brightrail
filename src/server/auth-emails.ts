@@ -1,11 +1,12 @@
 import "server-only";
-import { headers } from "next/headers";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { cookies, headers } from "next/headers";
 import { ApiError } from "@/lib/api-error";
 import { env } from "./env";
 import { adminClient } from "./supabase";
 
 /**
- * Sign-up confirmations, password resets and invitations sent through FlowForge's own Resend key
+ * Sign-up confirmations, password resets and invitations sent through Brightrail's own Resend key
  * (RESEND_API_KEY + EMAIL_FROM) instead of Supabase's built-in sender, which only allows a few
  * emails an hour. Links are created with Supabase's admin generateLink and land on /auth/callback.
  * When no key is set, the app keeps using Supabase's emails.
@@ -14,12 +15,36 @@ export const authEmailsEnabled = () => !!(env.resendApiKey && env.emailFrom);
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export function callbackLink(tokenHash: string, type: "signup" | "recovery" | "invite" | "magiclink", next?: string) {
+/**
+ * `binding` (from bindLinkToThisBrowser) ties the link to the browser that asked for it. A link opened
+ * anywhere else (or an unbound link, e.g. an invitation) gets a confirmation step first, so a link
+ * forwarded by someone else can't silently sign a person into the sender's account (login CSRF).
+ */
+export function callbackLink(tokenHash: string, type: "signup" | "recovery" | "invite" | "magiclink", next?: string, binding?: string) {
   const u = new URL("/auth/callback", env.appUrl);
   u.searchParams.set("token_hash", tokenHash);
   u.searchParams.set("type", type);
   if (next) u.searchParams.set("next", next);
+  if (binding) u.searchParams.set("b", binding);
   return u.toString();
+}
+
+export const LINK_COOKIE = "br_link";
+const bindingOf = (secret: string) => createHash("sha256").update(secret).digest("base64url").slice(0, 22);
+
+/** Sets a short-lived httpOnly cookie in this browser and returns the value to put in the emailed link. */
+export async function bindLinkToThisBrowser(): Promise<string> {
+  const secret = randomBytes(18).toString("base64url");
+  (await cookies()).set(LINK_COOKIE, secret, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/auth", maxAge: 3600 });
+  return bindingOf(secret);
+}
+
+/** True when the link's binding matches this browser's cookie. */
+export function linkMatchesBrowser(binding: string | null, cookieValue: string | undefined): boolean {
+  if (!binding || !cookieValue) return false;
+  const a = Buffer.from(bindingOf(cookieValue));
+  const b = Buffer.from(binding);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** One email; the idempotency key stops a retried request from sending twice. */
@@ -37,14 +62,20 @@ ${lines.map((l) => `<p>${esc(l)}</p>`).join("\n")}
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
-    console.error("[flowforge] Resend rejected an auth email", res.status, (await res.text()).slice(0, 300));
+    console.error("[brightrail] Resend rejected an auth email", res.status, (await res.text()).slice(0, 300));
     throw new ApiError("INTERNAL", "We couldn't send the email right now. Try again in a minute.");
   }
 }
 
+/** Hourly ceiling on each kind of auth email across all senders, independent of any client-supplied header. */
+const GLOBAL_HOURLY_CAP = 300;
+
 /**
- * Per-email and per-IP limits on auth emails, so these forms can't be used to flood an inbox or
- * burn the Resend quota. Counted atomically in Postgres (0007). Fails open if the table is missing.
+ * Per-email, per-IP and global limits on auth emails, so these forms can't be used to flood an inbox or
+ * burn the Resend quota. Counted atomically in Postgres (0007).
+ * The client IP comes from proxy headers, which a client can forge unless the host overwrites them, so the
+ * per-IP limit is best-effort; the global cap bounds total volume regardless. In production the throttle
+ * fails closed if its table is missing; in development it fails open so a fresh install still works.
  */
 export async function throttleAuthEmail(kind: string, email: string) {
   const h = await headers();
@@ -53,11 +84,13 @@ export async function throttleAuthEmail(kind: string, email: string) {
   const check = async (key: string, max: number) => {
     const { data, error } = await db.rpc("auth_email_hit", { p_key: key });
     if (error) {
-      console.error("[flowforge] auth email throttle unavailable — run 0007_auth_emails.sql", error.message);
+      console.error("[brightrail] auth email throttle unavailable — run 0007_auth_emails.sql", error.message);
+      if (process.env.NODE_ENV === "production") throw new ApiError("NOT_CONFIGURED", "Email sending is temporarily unavailable. Try again later.");
       return;
     }
     if (typeof data === "number" && data > max) throw new ApiError("RATE_LIMITED", "Too many emails requested. Wait a bit and try again.");
   };
   await check(`${kind}:${email.toLowerCase()}`, 3);
   await check(`ip:${ip}`, 20);
+  await check(`global:${kind}`, GLOBAL_HOURLY_CAP);
 }

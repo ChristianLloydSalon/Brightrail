@@ -11,8 +11,15 @@ export interface DbCheck { label: string; ok: boolean; detail: string }
 export async function checkDatabase(): Promise<DbCheck[] | null> {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return null;
   const db = adminClient();
-  const probe = async (table: string) => (await db.from(table).select("*", { head: true, count: "exact" }).limit(1)).error;
+  // Each probe gives up after 5 s, so a wrong or unreachable Supabase URL can't make /setup hang.
+  const probe = async (table: string) => {
+    const timeout = new Promise<{ code: string; message: string }>((resolve) => setTimeout(() => resolve({ code: "TIMEOUT", message: "Supabase didn't answer within 5 seconds" }), 5000));
+    const query = db.from(table).select("*", { head: true, count: "exact" }).limit(1).then((r) => r.error, (e: Error) => ({ code: "NETWORK", message: e.message }));
+    return Promise.race([query, timeout]);
+  };
   const [core, extra, sched] = await Promise.all([probe("workspaces"), probe("notification_reads"), probe("workflow_schedules")]);
+  if (core && (core.code === "TIMEOUT" || core.code === "NETWORK" || /fetch failed|ENOTFOUND|ECONN/i.test(core.message)))
+    return [{ label: "Database connection", ok: false, detail: `Couldn't reach Supabase (${core.message}). Check NEXT_PUBLIC_SUPABASE_URL in .env — it should be https://<project-ref>.supabase.co — and that the project isn't paused.` }];
   const onceCol = sched ? null : (await db.from("workflow_schedules").select("run_once").limit(1)).error;
   const verifCol = core ? null : (await db.from("webhook_endpoints").select("verification").limit(1)).error;
   const emailWin = await probe("auth_email_windows");

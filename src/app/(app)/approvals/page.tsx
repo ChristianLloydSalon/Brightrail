@@ -16,7 +16,7 @@ export default function ApprovalsPage() {
   const ws = useWorkspaceId();
   const [status, setStatus] = React.useState<ApprovalStatus | "all">("pending");
   const q = useQuery({ queryKey: ["approvals", ws, status], queryFn: () => aiApi.listApprovals(status) });
-  React.useEffect(() => { document.title = "Approvals · FlowForge"; }, []);
+  React.useEffect(() => { document.title = "Approvals · Brightrail"; }, []);
   return (
     <PageContainer>
       <PageHeader title="Approvals" description="Consequential recovery actions proposed by the AI assistant or requested by teammates. Nothing runs until an authorized person approves." />

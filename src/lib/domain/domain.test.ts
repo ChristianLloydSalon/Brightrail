@@ -78,3 +78,12 @@ describe("permissions", () => {
     expect(assignableRoles("admin")).not.toContain("admin");
   });
 });
+
+describe("API key redaction after the rename", () => {
+  it("hides Brightrail keys and older FlowForge-era keys in any field", () => {
+    const out = redact({ note: "br_live_AbCdEf123456", legacy: "ff_live_AbCdEf123456", fine: "hello" }) as Record<string, unknown>;
+    expect(out.note).toBe(REDACTED);
+    expect(out.legacy).toBe(REDACTED);
+    expect(out.fine).toBe("hello");
+  });
+});

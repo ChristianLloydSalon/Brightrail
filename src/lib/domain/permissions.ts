@@ -1,4 +1,7 @@
-import type { GrantKey, Permission, Role, RoleGrants } from "./types";
+import { CONFIGURABLE_GRANTS, type GrantKey, type Permission, type Role, type RoleGrants } from "./types";
+
+/** The only role:permission pairs a workspace may toggle. Anything else stored in grants is ignored. */
+export const CONFIGURABLE_GRANT_KEYS: ReadonlySet<string> = new Set(CONFIGURABLE_GRANTS.map((g) => `${g.role}:${g.permission}`));
 
 /**
  * Baseline role → permission matrix from spec §11 (Identity and access control).
@@ -41,8 +44,8 @@ export function isBasePermission(role: Role, permission: Permission): boolean {
 export function can(role: Role | undefined | null, permission: Permission, grants: RoleGrants = DEFAULT_GRANTS): boolean {
   if (!role) return false;
   if (BASE[role].includes(permission)) return true;
-  const key = `${role}:${permission}` as GrantKey;
-  return grants[key] === true;
+  const key = `${role}:${permission}`;
+  return CONFIGURABLE_GRANT_KEYS.has(key) && grants[key as GrantKey] === true;
 }
 
 export const ROLE_LABELS: Record<Role, string> = {

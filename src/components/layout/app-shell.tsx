@@ -369,7 +369,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar (≥1024px): full or icon rail */}
       <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex", collapsed ? "w-[68px]" : "w-60")} aria-label="Sidebar">
         <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "justify-center px-0")}>
-          <Link href="/dashboard" aria-label="FlowForge home" className="rounded-sm">
+          <Link href="/dashboard" aria-label="Brightrail home" className="rounded-sm">
             <Logo collapsed={collapsed} />
           </Link>
         </div>
@@ -407,7 +407,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation" aria-expanded={mobileOpen}>
             <Menu aria-hidden />
           </Button>
-          <Link href="/dashboard" className="lg:hidden" aria-label="FlowForge home">
+          <Link href="/dashboard" className="lg:hidden" aria-label="Brightrail home">
             <Logo className="[&>span]:hidden sm:[&>span]:inline" />
           </Link>
           <div className="ml-auto flex items-center gap-1">

@@ -5,14 +5,14 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ==========================================================================
-   FlowForge design tokens
+   Brightrail design tokens
    Single source of truth. Documented in DESIGN_SYSTEM.md.
    Every colour pair used for text is checked by scripts/check-contrast.mjs.
    ========================================================================== */
 :root {
   color-scheme: light;
 
-  /* Brand — "Ember": a forged-metal orange. 700 is used for text/fills on light surfaces. */
+  /* Brand — "Ember": a signal-lamp orange. 700 is used for text/fills on light surfaces. */
   --ember-50: #fff4ed;
   --ember-100: #ffe5d3;
   --ember-200: #fec7a5;
@@ -343,7 +343,7 @@
 .react-flow__node:focus-visible {
   outline: none;
 }
-.react-flow__node:focus-visible > .ff-node {
+.react-flow__node:focus-visible > .br-node {
   outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }

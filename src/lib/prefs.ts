@@ -15,6 +15,16 @@ interface Prefs {
   dismissGettingStarted: (workspaceId: string) => void;
 }
 
+// One-time carry-over of settings saved before the rename.
+try {
+  if (typeof window !== "undefined" && !localStorage.getItem("brightrail-prefs")) {
+    const old = localStorage.getItem("flowforge-prefs");
+    if (old) localStorage.setItem("brightrail-prefs", old);
+  }
+} catch {
+  /* storage unavailable */
+}
+
 export const usePrefs = create<Prefs>()(
   persist(
     (set) => ({
@@ -25,6 +35,6 @@ export const usePrefs = create<Prefs>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       dismissGettingStarted: (id) => set((s) => ({ dismissedGettingStarted: [...new Set([...s.dismissedGettingStarted, id])] })),
     }),
-    { name: "flowforge-prefs", version: 1 },
+    { name: "brightrail-prefs", version: 1 },
   ),
 );

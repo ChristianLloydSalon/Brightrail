@@ -1,4 +1,4 @@
--- FlowForge v2.1: webhook rate limits, per-person notification read state, Realtime.
+-- Brightrail v2.1: webhook rate limits, per-person notification read state, Realtime.
 -- Safe to run more than once. Run AFTER 0001_init.sql (SQL Editor → New query → paste → Run).
 
 -- ---------------------------------------------------------------- webhook rate limiting

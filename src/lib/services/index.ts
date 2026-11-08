@@ -18,7 +18,7 @@ async function unwrap<T>(p: Promise<Result<T>>): Promise<T> {
   try {
     res = await p;
   } catch {
-    throw new ApiError("NETWORK", "We couldn't reach FlowForge. Check your connection and try again.");
+    throw new ApiError("NETWORK", "We couldn't reach Brightrail. Check your connection and try again.");
   }
   if (!res.ok) throw new ApiError(res.error.code, res.error.message, res.error.fieldErrors, res.error.requestId);
   return res.data;
@@ -38,7 +38,7 @@ function authError(e: { message: string; status?: number } | null, fallback: str
   if (/rate limit/i.test(msg)) throw new ApiError("RATE_LIMITED", "Too many attempts. Wait a minute and try again.");
   // Configuration problems (wrong project URL or key) — point to the setup check instead of a raw gateway message.
   if (/invalid path specified|no api key found|invalid api key|failed to fetch|fetch failed/i.test(msg))
-    throw new ApiError("NOT_CONFIGURED", "FlowForge can't reach your Supabase project. Check NEXT_PUBLIC_SUPABASE_URL (just https://<project-ref>.supabase.co) and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env, restart the dev server, and open /setup to verify.");
+    throw new ApiError("NOT_CONFIGURED", "Brightrail can't reach your Supabase project. Check NEXT_PUBLIC_SUPABASE_URL (just https://<project-ref>.supabase.co) and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env, restart the dev server, and open /setup to verify.");
   throw new ApiError("VALIDATION", msg);
 }
 
@@ -102,8 +102,11 @@ export const authApi = {
     return { email: data.session?.user.email ?? null };
   },
   async resetPassword(password: string) {
-    const { error } = await supabaseBrowser().auth.updateUser({ password });
+    const sb = supabaseBrowser();
+    const { error } = await sb.auth.updateUser({ password });
     if (error) authError(error, "Couldn't update the password.");
+    // A reset usually means the old password may be known to someone else: end every other session.
+    await sb.auth.signOut({ scope: "others" });
     return { ok: true as const };
   },
   async changePassword(email: string, current: string, next: string) {
@@ -112,6 +115,7 @@ export const authApi = {
     if (e1) throw new ApiError("VALIDATION", "Check the highlighted fields.", { currentPassword: "Current password is incorrect." });
     const { error } = await sb.auth.updateUser({ password: next });
     if (error) authError(error, "Couldn't change the password.");
+    await sb.auth.signOut({ scope: "others" });
     return { ok: true as const };
   },
   ...wrap({ me: Account.me, createWorkspace: Account.createWorkspace, setActiveWorkspace: Account.setActiveWorkspace, acceptInvitation: Account.acceptInvitation, declineInvitation: Account.declineInvitation, updateProfile: Account.updateProfile, updateNotificationPrefs: Account.updateNotificationPrefs, completeOnboarding: Account.completeOnboarding, accountDeletionCheck: Account.accountDeletionCheck, deleteAccount: Account.deleteAccount }),

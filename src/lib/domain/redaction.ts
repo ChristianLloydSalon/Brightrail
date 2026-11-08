@@ -1,7 +1,7 @@
 import type { JsonValue } from "./types";
 
 /** Keys whose values are secrets and must never be shown or stored in run payloads. */
-const SECRET_KEYS = /^(authorization|api[_-]?key|token|access[_-]?token|refresh[_-]?token|secret|password|signing[_-]?secret|card(number)?|cvv|cvc|pan|client[_-]?secret)$/i;
+const SECRET_KEYS = /^(x-)?(authorization|api[_-]?key|auth[_-]?token|token|access[_-]?token|refresh[_-]?token|secret|password|signing[_-]?secret|card(number)?|cvv|cvc|pan|client[_-]?secret)$/i;
 /** Personal data that is partially masked (spec §11 "minimize stored payload data"). */
 const PII_KEYS = /(email|phone|address|fullname|customername)$/i;
 
@@ -31,7 +31,7 @@ export function redact(value: JsonValue, extraSensitive: string[] = []): JsonVal
       return out;
     }
     if (key && typeof v === "string" && PII_KEYS.test(key)) return maskPii(v);
-    if (typeof v === "string" && /^(sk|pk|ff|whsec|rk)_(live|test)_[A-Za-z0-9]{6,}/.test(v)) return REDACTED;
+    if (typeof v === "string" && /^(sk|pk|br|ff|whsec|rk)_(live|test)_[A-Za-z0-9]{6,}/.test(v)) return REDACTED;
     if (typeof v === "string" && /^Bearer\s+/i.test(v)) return REDACTED;
     return v;
   };

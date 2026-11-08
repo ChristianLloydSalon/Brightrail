@@ -100,7 +100,7 @@ export function ProfileView() {
                   <SwitchField id="n-appr-app" label="Pop-up in the app" description="A toast when a recovery action needs approval. Only for people who can approve." checked={prefs.approvals.inApp} disabled={savePrefs.isPending} onCheckedChange={(v) => setPref("approvals", "inApp", v)} />
                   <SwitchField id="n-appr-email" label="Email" description="An email when a recovery action needs your approval." checked={prefs.approvals.email} disabled={!emailReady || savePrefs.isPending} onCheckedChange={(v) => setPref("approvals", "email", v)} />
                 </fieldset>
-                {!emailReady && <p className="text-sm text-fg-muted">Email notifications are off for this FlowForge installation. An administrator can turn them on by setting <code>RESEND_API_KEY</code> and <code>EMAIL_FROM</code> (see SETUP.md).</p>}
+                {!emailReady && <p className="text-sm text-fg-muted">Email notifications are off for this Brightrail installation. An administrator can turn them on by setting <code>RESEND_API_KEY</code> and <code>EMAIL_FROM</code> (see SETUP.md).</p>}
               </>
             )}
           </PanelBody>

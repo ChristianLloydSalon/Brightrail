@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** FlowForge mark: three nodes joined by a forged path. */
+/** Brightrail mark: two stations joined by a rail, with a stop along the way. */
 export function LogoMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={cn("size-7", className)} aria-hidden focusable="false">
@@ -17,7 +17,7 @@ export function Logo({ className, collapsed }: { className?: string; collapsed?:
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark />
-      {!collapsed && <span className="text-[17px] font-semibold tracking-tight text-fg">FlowForge</span>}
+      {!collapsed && <span className="text-[17px] font-semibold tracking-tight text-fg">Brightrail</span>}
     </span>
   );
 }

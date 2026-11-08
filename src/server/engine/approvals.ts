@@ -22,7 +22,7 @@ export async function expireApproval(id: string): Promise<boolean> {
     const entry = { id: `log_${Date.now().toString(36)}`, ts: now, level: "warn", message: "The approval request expired without a decision. Run returned to failed; ask the assistant for a new recommendation to try again." };
     await db.from("workflow_runs").update({ status: "failed", logs: [...((run.logs as unknown[]) ?? []), entry] }).eq("id", row.run_id).eq("status", "waiting_approval");
   }
-  await db.from("audit_events").insert({ workspace_id: row.workspace_id, actor: { type: "service", id: "system", name: "FlowForge" }, action: "approval.expired", category: "approval", resource_type: "approval_request", resource_id: row.id, resource_name: row.workflow_name, metadata: { runId: row.run_id } });
+  await db.from("audit_events").insert({ workspace_id: row.workspace_id, actor: { type: "service", id: "system", name: "Brightrail" }, action: "approval.expired", category: "approval", resource_type: "approval_request", resource_id: row.id, resource_name: row.workflow_name, metadata: { runId: row.run_id } });
   return true;
 }
 
@@ -31,7 +31,7 @@ export async function scheduleApprovalExpiry(approvalId: string, expiresAt: stri
   try {
     await inngest.send({ id: `approval-${approvalId}`, name: APPROVAL_REQUESTED, data: { approvalId, expiresAt } });
   } catch (e) {
-    console.error("[flowforge] couldn't schedule approval expiry; the hourly sweep will handle it", (e as Error).message);
+    console.error("[brightrail] couldn't schedule approval expiry; the hourly sweep will handle it", (e as Error).message);
   }
 }
 

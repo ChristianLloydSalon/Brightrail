@@ -5,7 +5,8 @@ import { authEmailsEnabled, callbackLink, sendEmail } from "../auth-emails";
 import { ROLE_LABELS } from "@/lib/domain/permissions";
 import { PLANS, type PlanId } from "@/lib/domain/plans";
 import { ApiError, type Page } from "@/lib/api-error";
-import { assignableRoles } from "@/lib/domain/permissions";
+import { assignableRoles, CONFIGURABLE_GRANT_KEYS } from "@/lib/domain/permissions";
+import { API_KEY_SCOPES } from "@/lib/domain/types";
 import type { ApiKey, ApiKeyScope, AppNotification, AuditCategory, AuditEvent, GrantKey, Member, Role, RunStatus, Workspace, WorkspaceSettings } from "@/lib/domain/types";
 import { slugify } from "@/lib/utils";
 import { act, getContext, must, WS_COOKIE } from "../context";
@@ -39,8 +40,24 @@ export async function updateWorkspace(input: { name: string; slug: string; setti
     if (r.initialIntervalSec < 1 || r.initialIntervalSec > 300) errors.initialIntervalSec = "Use between 1 and 300 seconds.";
     if (r.maxIntervalSec < r.initialIntervalSec) errors.maxIntervalSec = "Must be at least the initial interval.";
     if (![7, 14, 30, 90].includes(input.settings.retentionDays)) errors.retentionDays = "Choose 7, 14, 30 or 90 days.";
+    const s = input.settings;
+    if (!Number.isFinite(r.backoffCoefficient) || r.backoffCoefficient < 1 || r.backoffCoefficient > 10) errors.backoffCoefficient = "Use between 1 and 10.";
+    if (!Number.isInteger(s.approvalExpiryHours) || s.approvalExpiryHours < 1 || s.approvalExpiryHours > 168) errors.approvalExpiryHours = "Use between 1 and 168 hours.";
+    if (s.payloadStorage !== "redacted" && s.payloadStorage !== "minimal") errors.payloadStorage = "Choose a payload storage option.";
+    if (typeof s.aiAssistantEnabled !== "boolean") errors.aiAssistantEnabled = "Choose on or off.";
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: s.timezone });
+    } catch {
+      errors.timezone = "Choose a valid time zone.";
+    }
     if (Object.keys(errors).length) throw new ApiError("VALIDATION", "Check the highlighted fields.", errors);
-    const { data, error } = await ctx.db.from("workspaces").update({ name: input.name.trim(), slug, settings: input.settings }).eq("id", ctx.workspace.id).select("*").single();
+    // Store only the known settings, never extra keys sent by a client.
+    const settings: WorkspaceSettings = {
+      timezone: s.timezone, retentionDays: s.retentionDays, payloadStorage: s.payloadStorage, aiAssistantEnabled: s.aiAssistantEnabled, approvalExpiryHours: s.approvalExpiryHours,
+      defaultRetry: { maxAttempts: r.maxAttempts, initialIntervalSec: r.initialIntervalSec, backoffCoefficient: r.backoffCoefficient, maxIntervalSec: r.maxIntervalSec },
+    };
+    input = { ...input, settings };
+    const { data, error } = await ctx.db.from("workspaces").update({ name: input.name.trim(), slug, settings }).eq("id", ctx.workspace.id).select("*").single();
     if (error?.code === "23505") throw new ApiError("VALIDATION", "Check the highlighted fields.", { slug: "This URL is taken." });
     const row = must({ data, error });
     const changed = Object.keys(input.settings).filter((k) => JSON.stringify(input.settings[k as keyof WorkspaceSettings]) !== JSON.stringify(ctx.workspace.settings[k as keyof WorkspaceSettings]));
@@ -52,6 +69,9 @@ export async function updateWorkspace(input: { name: string; slug: string; setti
 export async function updateGrants(grants: Partial<Record<GrantKey, boolean>>) {
   return act(async () => {
     const ctx = await getContext("members.manage");
+    if (!grants || typeof grants !== "object" || Array.isArray(grants)) throw new ApiError("VALIDATION", "Invalid permissions.");
+    for (const [k, v] of Object.entries(grants))
+      if (!CONFIGURABLE_GRANT_KEYS.has(k) || typeof v !== "boolean") throw new ApiError("VALIDATION", "That permission can't be changed.");
     const next = { ...ctx.workspace.grants, ...grants };
     const row = must(await ctx.db.from("workspaces").update({ grants: next }).eq("id", ctx.workspace.id).select("*").single());
     for (const [k, v] of Object.entries(grants)) await ctx.audit({ action: "workspace.grants_updated", category: "workspace", resourceType: "workspace", resourceId: ctx.workspace.id, resourceName: ctx.workspace.name, metadata: { grant: k, enabled: Boolean(v) } });
@@ -62,6 +82,7 @@ export async function updateGrants(grants: Partial<Record<GrantKey, boolean>>) {
 export async function removeWorkspace(confirmName: string) {
   return act(async () => {
     const ctx = await getContext("workspace.delete");
+    if (ctx.member.role !== "owner") throw new ApiError("FORBIDDEN", "Only the workspace owner can delete it.");
     if (confirmName.trim() !== ctx.workspace.name) throw new ApiError("VALIDATION", "Type the workspace name exactly to confirm.", { confirm: "The name doesn't match." });
     await ctx.db.from("workspaces").delete().eq("id", ctx.workspace.id);
     (await cookies()).delete(WS_COOKIE);
@@ -92,6 +113,8 @@ export async function inviteMembers(input: { emails: string[]; role: Role; messa
     const ctx = await getContext("members.manage");
     const emails = [...new Set(input.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
     if (!emails.length) throw new ApiError("VALIDATION", "Check the highlighted fields.", { emails: "Enter at least one email address." });
+    if (emails.length > 20) throw new ApiError("VALIDATION", "Check the highlighted fields.", { emails: "Invite up to 20 people at a time." });
+    await throttle(ctx, `invites:${ctx.workspace.id}`, 50, emails.length);
     const bad = emails.filter((e) => !EMAIL.test(e));
     if (bad.length) throw new ApiError("VALIDATION", "Check the highlighted fields.", { emails: `Not a valid email: ${bad.join(", ")}` });
     if (!assignableRoles(ctx.member.role).includes(input.role)) throw new ApiError("FORBIDDEN", "You can't assign that role.");
@@ -107,19 +130,25 @@ export async function inviteMembers(input: { emails: string[]; role: Role; messa
       created.push(toMember(row));
       await ctx.audit({ action: "member.invited", category: "member", resourceType: "member", resourceId: row.id, resourceName: email, metadata: { role: input.role } });
     }
+    // The quota check above can race with a concurrent invite; re-count and undo this batch if it overshot.
+    const { count: after } = await ctx.db.from("workspace_members").select("id", { count: "exact", head: true }).eq("workspace_id", ctx.workspace.id).neq("status", "suspended");
+    if ((after ?? 0) > ctx.workspace.quotas.members) {
+      await ctx.db.from("workspace_members").delete().eq("workspace_id", ctx.workspace.id).in("id", created.map((m) => m.id));
+      throw new ApiError("CONFLICT", `This workspace allows ${ctx.workspace.quotas.members} members.`);
+    }
     return created;
   });
 }
 
 /**
  * Emails an invitation. New people get a link that creates their account and asks them to set a password;
- * people who already have an account get a link to sign in (the invitation is waiting in FlowForge).
- * Uses FlowForge's Resend key when configured, otherwise Supabase's built-in invite email.
+ * people who already have an account get a link to sign in (the invitation is waiting in Brightrail).
+ * Uses Brightrail's Resend key when configured, otherwise Supabase's built-in invite email.
  * Returns the invited person's user id when an account exists or was created.
  */
 async function sendInvitation(ctx: Awaited<ReturnType<typeof getContext>>, email: string, existingUserId: string | null, role: Role): Promise<string | null> {
   const db = ctx.db;
-  const lines = [`${ctx.user.name} invited you to join “${ctx.workspace.name}” on FlowForge as ${/^[aeiou]/i.test(ROLE_LABELS[role]) ? "an" : "a"} ${ROLE_LABELS[role]}.`];
+  const lines = [`${ctx.user.name} invited you to join “${ctx.workspace.name}” on Brightrail as ${/^[aeiou]/i.test(ROLE_LABELS[role]) ? "an" : "a"} ${ROLE_LABELS[role]}.`];
   if (!authEmailsEnabled()) {
     if (existingUserId) return existingUserId; // they'll see it in the app's workspace switcher
     const { data, error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: `${env.appUrl}/auth/callback?next=/reset-password?invited=1`, data: { invited_to: ctx.workspace.name, name: "" } });
@@ -127,7 +156,7 @@ async function sendInvitation(ctx: Awaited<ReturnType<typeof getContext>>, email
     return data?.user?.id ?? null;
   }
   if (existingUserId) {
-    await sendEmail(email, `You're invited to ${ctx.workspace.name} on FlowForge`, [...lines, "Sign in to accept: the invitation is waiting in the workspace menu."], { label: "Sign in to FlowForge", url: `${env.appUrl}/sign-in` }, `invite-${ctx.workspace.id}-${email}-${Math.floor(Date.now() / 60_000)}`);
+    await sendEmail(email, `You're invited to ${ctx.workspace.name} on Brightrail`, [...lines, "Sign in to accept: the invitation is waiting in the workspace menu."], { label: "Sign in to Brightrail", url: `${env.appUrl}/sign-in` }, `invite-${ctx.workspace.id}-${email}-${Math.floor(Date.now() / 60_000)}`);
     return existingUserId;
   }
   let gen = await db.auth.admin.generateLink({ type: "invite", email, options: { data: { invited_to: ctx.workspace.name, name: "" }, redirectTo: `${env.appUrl}/auth/callback?next=/reset-password?invited=1` } });
@@ -138,9 +167,27 @@ async function sendInvitation(ctx: Awaited<ReturnType<typeof getContext>>, email
     type = "magiclink";
   }
   if (gen.error || !gen.data.properties?.hashed_token) throw new ApiError("INTERNAL", `Couldn't create the invitation for ${email}.`);
-  await sendEmail(email, `You're invited to ${ctx.workspace.name} on FlowForge`, [...lines, "Accept to create your account and choose a password. The link works for 24 hours."],
+  await sendEmail(email, `You're invited to ${ctx.workspace.name} on Brightrail`, [...lines, "Accept to create your account and choose a password. The link works for 24 hours."],
     { label: "Accept invitation", url: callbackLink(gen.data.properties.hashed_token, type, "/reset-password?invited=1") }, `invite-${gen.data.user?.id}-${gen.data.properties.hashed_token.slice(0, 12)}`);
   return gen.data.user?.id ?? null;
+}
+
+/**
+ * Hourly cap on invitation emails (sent through Brightrail's own email key), counted per key in Postgres (0008).
+ * Fails closed in production if the counter is unavailable, open in development.
+ */
+async function throttle(ctx: Awaited<ReturnType<typeof getContext>>, key: string, maxPerHour: number, count = 1) {
+  let hits = 0;
+  for (let i = 0; i < count; i++) {
+    const { data, error } = await ctx.db.rpc("rate_hit", { p_key: key, p_window_sec: 3600 });
+    if (error) {
+      console.error("[brightrail] invitation throttle unavailable — run 0008_security_fixes.sql", error.message);
+      if (process.env.NODE_ENV === "production") throw new ApiError("NOT_CONFIGURED", "Invitations are temporarily unavailable. Try again later.");
+      return;
+    }
+    hits = typeof data === "number" ? data : 0;
+  }
+  if (hits > maxPerHour) throw new ApiError("RATE_LIMITED", "Too many invitation emails this hour. Try again later.");
 }
 
 async function findMember(ctx: Awaited<ReturnType<typeof getContext>>, id: string) {
@@ -154,7 +201,7 @@ export async function changeRole(memberId: string, role: Role) {
     if (m.role === "owner") throw new ApiError("FORBIDDEN", "The owner's role can't be changed.");
     if (m.userId === ctx.user.id) throw new ApiError("FORBIDDEN", "You can't change your own role.");
     if (!assignableRoles(ctx.member.role).includes(role) || (ctx.member.role === "admin" && m.role === "admin")) throw new ApiError("FORBIDDEN", "You can't assign that role.");
-    const row = must(await ctx.db.from("workspace_members").update({ role }).eq("id", memberId).select("*").single());
+    const row = must(await ctx.db.from("workspace_members").update({ role }).eq("id", memberId).eq("workspace_id", ctx.workspace.id).select("*").single());
     await ctx.audit({ action: "member.role_changed", category: "member", resourceType: "member", resourceId: memberId, resourceName: m.name || m.email, metadata: { from: m.role, to: role } });
     return toMember(row);
   });
@@ -205,7 +252,7 @@ export async function transferOwnership(memberId: string) {
     if (m.userId === ctx.user.id) throw new ApiError("CONFLICT", "You already own this workspace.");
     if (m.status !== "active" || !m.userId) throw new ApiError("CONFLICT", "Ownership can only go to an active member who has joined.");
     must(await ctx.db.from("workspace_members").update({ role: "owner" }).eq("id", memberId).eq("workspace_id", ctx.workspace.id).select("id").single());
-    must(await ctx.db.from("workspace_members").update({ role: "admin" }).eq("id", ctx.member.id).select("id").single());
+    must(await ctx.db.from("workspace_members").update({ role: "admin" }).eq("id", ctx.member.id).eq("workspace_id", ctx.workspace.id).select("id").single());
     await ctx.audit({ action: "workspace.ownership_transferred", category: "workspace", resourceType: "workspace", resourceId: ctx.workspace.id, resourceName: ctx.workspace.name, metadata: { from: ctx.user.name, to: m.name || m.email } });
     return { ok: true };
   });
@@ -216,8 +263,9 @@ export async function setSuspended(memberId: string, suspended: boolean) {
     const ctx = await getContext("members.manage");
     const m = await findMember(ctx, memberId);
     if (m.role === "owner" || m.userId === ctx.user.id) throw new ApiError("FORBIDDEN", "You can't suspend this member.");
+    if (ctx.member.role !== "owner" && m.role === "admin") throw new ApiError("FORBIDDEN", "Only the owner can suspend an admin.");
     if (m.status === "invited") throw new ApiError("CONFLICT", "Revoke the invitation instead.");
-    const row = must(await ctx.db.from("workspace_members").update({ status: suspended ? "suspended" : "active" }).eq("id", memberId).select("*").single());
+    const row = must(await ctx.db.from("workspace_members").update({ status: suspended ? "suspended" : "active" }).eq("id", memberId).eq("workspace_id", ctx.workspace.id).select("*").single());
     await ctx.audit({ action: suspended ? "member.suspended" : "member.reactivated", category: "member", resourceType: "member", resourceId: memberId, resourceName: m.name || m.email, metadata: {} });
     return toMember(row);
   });
@@ -229,7 +277,8 @@ export async function removeMember(memberId: string) {
     const m = await findMember(ctx, memberId);
     if (m.role === "owner") throw new ApiError("FORBIDDEN", "The owner can't be removed.");
     if (m.userId === ctx.user.id) throw new ApiError("FORBIDDEN", "You can't remove yourself here.");
-    await ctx.db.from("workspace_members").delete().eq("id", memberId);
+    if (ctx.member.role !== "owner" && m.role === "admin") throw new ApiError("FORBIDDEN", "Only the owner can remove an admin.");
+    await ctx.db.from("workspace_members").delete().eq("id", memberId).eq("workspace_id", ctx.workspace.id);
     await ctx.audit({ action: m.status === "invited" ? "member.invite_revoked" : "member.removed", category: "member", resourceType: "member", resourceId: memberId, resourceName: m.name || m.email, metadata: { role: m.role } });
     return { ok: true };
   });
@@ -240,9 +289,10 @@ export async function resendInvite(memberId: string) {
     const ctx = await getContext("members.manage");
     const m = await findMember(ctx, memberId);
     if (m.status !== "invited") throw new ApiError("CONFLICT", "Only pending invitations can be resent.");
+    await throttle(ctx, `invite-resend:${m.id}`, 3);
     const { data: profile } = await ctx.db.from("profiles").select("id").eq("email", m.email).maybeSingle();
     await sendInvitation(ctx, m.email, profile?.id ?? null, m.role);
-    const row = must(await ctx.db.from("workspace_members").update({ invited_at: ctx.now() }).eq("id", memberId).select("*").single());
+    const row = must(await ctx.db.from("workspace_members").update({ invited_at: ctx.now() }).eq("id", memberId).eq("workspace_id", ctx.workspace.id).select("*").single());
     await ctx.audit({ action: "member.invite_resent", category: "member", resourceType: "member", resourceId: memberId, resourceName: m.email, metadata: {} });
     return toMember(row);
   });
@@ -265,9 +315,11 @@ export async function createApiKey(input: { name: string; scopes: ApiKeyScope[];
     const ctx = await getContext("apikeys.manage");
     const errors: Record<string, string> = {};
     if (input.name.trim().length < 3) errors.name = "Use at least 3 characters.";
-    if (!input.scopes.length) errors.scopes = "Choose at least one scope.";
+    if (!Array.isArray(input.scopes) || !input.scopes.length) errors.scopes = "Choose at least one scope.";
+    else if (!input.scopes.every((s) => (API_KEY_SCOPES as readonly string[]).includes(s))) errors.scopes = "Choose scopes from the list.";
+    if (input.expiresInDays !== null && (!Number.isInteger(input.expiresInDays) || input.expiresInDays < 1 || input.expiresInDays > 365)) errors.expiresInDays = "Use between 1 and 365 days, or no expiry.";
     if (Object.keys(errors).length) throw new ApiError("VALIDATION", "Check the highlighted fields.", errors);
-    const secret = randomToken("ff_live_", 24);
+    const secret = randomToken("br_live_", 24);
     const row = must(await ctx.db.from("api_keys").insert({
       workspace_id: ctx.workspace.id, name: input.name.trim(), prefix: secret.slice(0, 12), hint: `••••${secret.slice(-4)}`, key_hash: sha256(secret), scopes: input.scopes,
       created_by: ctx.user.id, expires_at: input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86400_000).toISOString() : null,
@@ -371,7 +423,8 @@ export async function dashboard() {
         return { runId: r.id, workflowName: r.workflow_name, step: s?.nodeLabel ?? "—", errorCode: s?.errorCode ?? "UNKNOWN", at: r.ended_at ?? r.started_at, hasApproval: (aps ?? []).some((a) => a.run_id === r.id) };
       }),
       pendingApprovals: pending ?? 0,
-      activity: (activity ?? []).map(toAudit),
+      // Recent activity comes from the audit log, so it is shown only to roles allowed to see the audit log.
+      activity: ctx.can("audit.view") ? (activity ?? []).map(toAudit) : [],
       usage: { executions: monthCount ?? 0, quota: ctx.workspace.quotas.executionsPerMonth, members: (members ?? []).filter((m) => m.status !== "suspended").length, memberQuota: ctx.workspace.quotas.members, connections: activeConns.length, connectionQuota: ctx.workspace.quotas.connections, connectionErrors: activeConns.filter((c) => c.status === "error").length },
       workspace: { name: ctx.workspace.name, plan: ctx.workspace.plan, timezone: ctx.workspace.settings.timezone, role: ctx.member.role },
       gettingStarted: {
@@ -410,7 +463,7 @@ export async function unreadCounts() {
       ctx.db.rpc("unread_notification_count", { p_ws: ctx.workspace.id, p_user: ctx.user.id, p_since: memberSince(ctx.member) }),
       ctx.db.from("approval_requests").select("id", { count: "exact", head: true }).eq("workspace_id", ctx.workspace.id).eq("status", "pending"),
     ]);
-    if (unread.error) console.error("[flowforge] unread count failed — did you run 0002_live_limits_reads.sql?", unread.error.message);
+    if (unread.error) console.error("[brightrail] unread count failed — did you run 0002_live_limits_reads.sql?", unread.error.message);
     return { notifications: typeof unread.data === "number" ? unread.data : 0, approvals: approvals ?? 0 };
   });
 }

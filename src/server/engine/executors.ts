@@ -3,13 +3,14 @@ import { lookup } from "node:dns/promises";
 import { evalFormula } from "@/lib/engine/formula";
 import { appendRow, describeSpreadsheet, parseServiceAccount, spreadsheetIdFrom } from "../google-sheets";
 import { airtableCreate, airtableTest, notionCreate, notionTest, teamsSend, teamsUrlProblem, telegramSend, telegramTest } from "../connectors";
-import { redact } from "@/lib/domain/redaction";
+import { REDACTED, redact } from "@/lib/domain/redaction";
 import type { JsonValue, NodeOf, WorkflowNode } from "@/lib/domain/types";
 import { checkOutboundUrl, isPrivateAddress } from "@/lib/domain/url-safety";
-import { applyTransform, classifyHttpStatus, evalCondition, fillTemplate, idempotencyKey, resolveValue, type StepFailure } from "@/lib/engine/logic";
+import { applyTransform, classifyHttpStatus, evalCondition, fillJsonTemplate, fillTemplate, idempotencyKey, resolveValue, type StepFailure } from "@/lib/engine/logic";
 import { INTEGRATIONS } from "@/lib/integrations/catalog";
 import { getPath, setPath } from "@/lib/utils";
-import { decryptSecret } from "../crypto";
+import { connectionSecretContext, decryptSecret } from "../crypto";
+import { pinnedRequest, type PinnedResponse } from "./http-transport";
 import { adminClient } from "../supabase";
 
 /**
@@ -24,13 +25,17 @@ export type ExecResult =
 
 const MAX_BODY = 64 * 1024;
 
-async function loadConnection(id: string | undefined, workspaceId: string) {
+/**
+ * Loads a connection only if it belongs to the run's workspace AND is of the integration the step expects,
+ * so an HTTP step can't borrow (and leak) a Slack/Resend/Notion/… credential, and vice versa.
+ */
+async function loadConnection(id: string | undefined, workspaceId: string, integrationId: string) {
   if (!id) return null;
   const db = adminClient();
-  const { data: conn } = await db.from("connections").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
+  const { data: conn } = await db.from("connections").select("*").eq("id", id).eq("workspace_id", workspaceId).eq("integration_id", integrationId).maybeSingle();
   if (!conn) return null;
   const { data: sec } = await db.from("connection_secrets").select("ciphertext").eq("connection_id", id).maybeSingle();
-  return { conn, secret: sec ? decryptSecret(sec.ciphertext) : "" };
+  return { conn, secret: sec ? decryptSecret(sec.ciphertext, connectionSecretContext(id)) : "" };
 }
 
 /** Resolves the hostname and refuses private/loopback/metadata addresses (DNS rebinding defence). */
@@ -42,13 +47,15 @@ export async function assertPublicHost(url: string) {
   if (!addrs.length) throw Object.assign(new Error("DNS"), { failure: { code: "DNS_LOOKUP_FAILED", message: `Couldn't resolve ${host}.`, errorClass: "transient", retryable: true } satisfies StepFailure });
   if (addrs.some((a) => isPrivateAddress(a.address)))
     throw Object.assign(new Error("SSRF"), { failure: { code: "SSRF_BLOCKED", message: `${host} resolves to a private address. Only public hosts are allowed.`, errorClass: "configuration", retryable: false } satisfies StepFailure });
+  return addrs[0]!;
 }
 
-async function send(url: string, init: RequestInit & { timeoutSec: number }, provider: string) {
-  await assertPublicHost(url);
-  let res: Response;
+async function send(url: string, init: { method: string; headers: Record<string, string>; body?: string; timeoutSec: number }, provider: string) {
+  // Connect to the exact address that was just checked, so a second DNS answer can't point elsewhere.
+  const pin = await assertPublicHost(url);
+  let res: PinnedResponse;
   try {
-    res = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(init.timeoutSec * 1000) });
+    res = await pinnedRequest(url, { method: init.method, headers: init.headers, body: init.body }, pin, init.timeoutSec * 1000, MAX_BODY);
   } catch (e) {
     const timeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
     throw Object.assign(new Error("fetch"), {
@@ -59,14 +66,14 @@ async function send(url: string, init: RequestInit & { timeoutSec: number }, pro
   }
   if (res.status >= 300 && res.status < 400)
     throw Object.assign(new Error("redirect"), { failure: { code: `HTTP_${res.status}_REDIRECT`, message: `${provider} returned a redirect. Redirects aren't followed; use the final URL.`, errorClass: "configuration", retryable: false } });
-  const text = (await res.text()).slice(0, MAX_BODY);
+  const text = res.text;
   let body: JsonValue = text;
   try {
     body = text ? (JSON.parse(text) as JsonValue) : null;
   } catch {
     /* keep text */
   }
-  if (!res.ok) throw Object.assign(new Error("status"), { failure: classifyHttpStatus(res.status, provider), body });
+  if (res.status < 200 || res.status >= 300) throw Object.assign(new Error("status"), { failure: classifyHttpStatus(res.status, provider), body });
   return { status: res.status, body };
 }
 
@@ -138,28 +145,54 @@ export async function executeNode(node: WorkflowNode, data: Record<string, unkno
   }
 }
 
+/**
+ * True when `url` is on the same origin as `base` and its path is the base path or below it (segment-bounded).
+ * A plain string prefix would let "https://api.example.com.attacker.example/" match "https://api.example.com".
+ */
+export function withinBase(url: string, base: string): boolean {
+  try {
+    const u = new URL(url);
+    const b = new URL(base);
+    if (u.origin !== b.origin) return false;
+    const prefix = b.pathname.endsWith("/") ? b.pathname : `${b.pathname}/`;
+    return u.pathname === b.pathname || u.pathname.startsWith(prefix);
+  } catch {
+    return false;
+  }
+}
+
+const AUTH_HEADERS = new Set(["authorization", "x-api-key"]);
+
 async function execHttp(node: NodeOf<"http">, data: Record<string, unknown>, run: RunRef): Promise<ExecResult> {
   const c = node.config;
-  const url = fillTemplate(c.url, data);
+  // Run data is percent-encoded into the URL so it can't add path segments, a query or a fragment.
+  const url = fillTemplate(c.url, data, encodeURIComponent);
   const headers: Record<string, string> = Object.fromEntries(c.headers.filter((h) => h.key).map((h) => [h.key, fillTemplate(h.value, data)]));
+  const badHeader = Object.entries(headers).find(([, v]) => /[\u0000-\u0008\u000a-\u001f\u007f]/.test(v));
+  if (badHeader) return { ok: false, input: { method: c.method, url }, failure: { code: "VALIDATION_HEADER", message: `Header “${badHeader[0]}” would contain a line break or control character from run data.`, errorClass: "validation", retryable: false } };
   const key = idempotencyKey(run.id, run.scope ? `${node.id}@${run.scope}` : node.id);
   if (c.useIdempotencyKey) headers["Idempotency-Key"] = key;
-  const loaded = await loadConnection(c.connectionId, run.workspaceId);
+  const loaded = await loadConnection(c.connectionId, run.workspaceId, "int_http");
   if (c.connectionId && !loaded)
-    return { ok: false, input: { method: c.method, url }, failure: { code: "CONNECTION_NOT_FOUND", message: "The selected connection no longer exists.", errorClass: "configuration", retryable: false } };
+    return { ok: false, input: { method: c.method, url }, failure: { code: "CONNECTION_NOT_FOUND", message: "The selected connection no longer exists or isn't an HTTP Request connection.", errorClass: "configuration", retryable: false } };
+  let authHeader: string | null = null;
   if (loaded) {
     if (loaded.conn.status === "revoked") return { ok: false, input: { method: c.method, url }, failure: { code: "CONNECTION_REVOKED", message: `Connection “${loaded.conn.display_name}” was revoked.`, errorClass: "permission", retryable: false } };
     const base = String(loaded.conn.config?.baseUrl ?? "");
-    if (base && !url.startsWith(base)) return { ok: false, input: { method: c.method, url }, failure: { code: "URL_OUTSIDE_CONNECTION", message: `This connection only allows URLs starting with ${base}.`, errorClass: "configuration", retryable: false } };
-    const header = String(loaded.conn.config?.authHeader ?? "Authorization");
-    headers[header] = header === "Authorization" ? `Bearer ${loaded.secret}` : loaded.secret;
+    // An HTTP connection without a base URL would be an unrestricted credential: refuse it.
+    if (!base || !withinBase(url, base)) return { ok: false, input: { method: c.method, url }, failure: { code: "URL_OUTSIDE_CONNECTION", message: base ? `This connection only allows URLs under ${base}.` : "This connection has no base URL. Edit it and set one.", errorClass: "configuration", retryable: false } };
+    const configured = String(loaded.conn.config?.authHeader ?? "Authorization");
+    authHeader = AUTH_HEADERS.has(configured.toLowerCase()) ? configured : "Authorization";
+    headers[authHeader] = authHeader.toLowerCase() === "authorization" ? `Bearer ${loaded.secret}` : loaded.secret;
   }
   let body: string | undefined;
   if (c.method !== "GET" && c.method !== "DELETE" && c.body?.trim()) {
-    body = fillTemplate(c.body, data);
+    body = fillJsonTemplate(c.body, data);
     headers["Content-Type"] ??= "application/json";
   }
-  const input = redact({ method: c.method, url, headers, body: body ?? null } as JsonValue);
+  // The injected credential is always masked in the recorded step input, whatever the header is called.
+  const shownHeaders = authHeader ? { ...headers, [authHeader]: REDACTED } : headers;
+  const input = redact({ method: c.method, url, headers: shownHeaders, body: body ?? null } as JsonValue);
   const res = await send(url, { method: c.method, headers, body, timeoutSec: c.timeoutSec }, new URL(url).hostname);
   data.status = res.status;
   data.body = res.body;
@@ -174,8 +207,8 @@ async function execAction(node: NodeOf<"action">, data: Record<string, unknown>,
   const mapped = mapInputs(c.inputMapping, data);
   const input = redact(mapped as JsonValue, action?.sensitiveFields ?? []);
   if (!integ || !action) return { ok: false, input, failure: { code: "ACTION_NOT_FOUND", message: "The selected integration action doesn't exist.", errorClass: "configuration", retryable: false } };
-  const loaded = await loadConnection(c.connectionId, run.workspaceId);
-  if (!loaded) return { ok: false, input, failure: { code: "CONNECTION_NOT_FOUND", message: "Choose a connection for this step.", errorClass: "configuration", retryable: false } };
+  const loaded = await loadConnection(c.connectionId, run.workspaceId, integ.id);
+  if (!loaded) return { ok: false, input, failure: { code: "CONNECTION_NOT_FOUND", message: `Choose a ${integ.name} connection for this step.`, errorClass: "configuration", retryable: false } };
   if (loaded.conn.status === "revoked") return { ok: false, input, failure: { code: "CONNECTION_REVOKED", message: `Connection “${loaded.conn.display_name}” was revoked.`, errorClass: "permission", retryable: false } };
   const key = idempotencyKey(run.id, run.scope ? `${node.id}@${run.scope}` : node.id);
   const text = String(mapped.text ?? mapped.message ?? "").slice(0, 3900);
@@ -261,7 +294,7 @@ export async function testConnectionConfig(integrationId: string, config: Record
         return { ok: true, message: "Webhook URL looks valid. Slack only confirms it when the first message is posted." };
       case "int_discord": {
         if (!/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(secret)) return { ok: false, message: "That isn't a Discord webhook URL. It should look like https://discord.com/api/webhooks/123/abc." };
-        const res = await fetch(secret, { signal: AbortSignal.timeout(10_000) });
+        const res = await fetch(secret, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
         return res.ok ? { ok: true, message: "Discord confirmed the webhook exists." } : { ok: false, message: `Discord returned ${res.status}. The webhook may have been deleted.` };
       }
       case "int_resend": {

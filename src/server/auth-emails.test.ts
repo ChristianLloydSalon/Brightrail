@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }) }));
 const hits = new Map<string, number>();
 vi.mock("./supabase", () => ({ adminClient: () => ({ rpc: async (_: string, { p_key }: { p_key: string }) => { hits.set(p_key, (hits.get(p_key) ?? 0) + 1); return { data: hits.get(p_key), error: null }; } }) }));
-vi.mock("./env", () => ({ env: { appUrl: "https://app.example.com", resendApiKey: "re_test", emailFrom: "FlowForge <a@b.co>" } }));
+vi.mock("./env", () => ({ env: { appUrl: "https://app.example.com", resendApiKey: "re_test", emailFrom: "Brightrail <a@b.co>" } }));
 const m = await import("./auth-emails");
 afterEach(() => vi.unstubAllGlobals());
 

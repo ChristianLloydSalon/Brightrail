@@ -52,7 +52,7 @@ export const toConnection = (r: Row): Connection => ({
 
 export const toWebhook = (r: Row): WebhookEndpoint => ({
   id: r.id, workspaceId: r.workspace_id, workflowId: r.workflow_id, name: r.name, status: r.status, signingSecretRef: `db://webhook_secrets/${r.id}`,
-  secretHint: r.secret_hint, replayWindowSec: r.replay_window_sec, maxBodyKb: r.max_body_kb, rateLimitPerMin: r.rate_limit_per_min, verification: r.verification === "url_key" ? "url_key" : "hmac", createdAt: r.created_at,
+  secretHint: r.secret_hint, replayWindowSec: r.replay_window_sec, maxBodyKb: r.max_body_kb, rateLimitPerMin: r.rate_limit_per_min, verification: r.verification === "url_key" ? "url_key" : "hmac", headerKeyOnly: r.header_key_only === true, createdAt: r.created_at,
   rotatedAt: r.rotated_at ?? undefined,
 });
 

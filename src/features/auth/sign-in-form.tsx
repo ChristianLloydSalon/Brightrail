@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { reloadTo } from "@/lib/navigation";
+import { reloadTo, safeLocalPath } from "@/lib/navigation";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -28,7 +28,7 @@ export function SignInForm() {
     mutationFn: () => authApi.signIn(email, password),
     onSuccess: (res) => {
       const next = params.get("next");
-      const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      const safeNext = safeLocalPath(next);
       // Full navigation so the server sees the fresh session cookie.
       if (res.needsCode) {
         reloadTo(`/mfa?next=${encodeURIComponent(safeNext)}`);
@@ -57,9 +57,9 @@ export function SignInForm() {
 
   return (
     <>
-      <AuthHeading title="Sign in to FlowForge" description="Use your work email to access your workspaces." />
+      <AuthHeading title="Sign in to Brightrail" description="Use your work email to access your workspaces." />
       <SocialButtons next={params.get("next") ?? "/dashboard"} />
-      {params.get("deleted") === "1" && <Alert tone="success" className="mb-5" role="status" title="Your account was deleted">Thanks for using FlowForge.</Alert>}
+      {params.get("deleted") === "1" && <Alert tone="success" className="mb-5" role="status" title="Your account was deleted">Thanks for using Brightrail.</Alert>}
       {params.get("error") === "oauth" && (
         <Alert tone="warning" className="mb-5" role="alert" title="That sign-in didn't finish">It was cancelled or the provider refused it. Try again, or use your email and password.</Alert>
       )}
@@ -88,7 +88,7 @@ export function SignInForm() {
         </Button>
       </form>
       <p className="mt-6 text-center text-base text-fg-muted">
-        New to FlowForge?{" "}
+        New to Brightrail?{" "}
         <Link href="/sign-up" className="font-medium text-link hover:underline">Create an account</Link>
       </p>
     </>

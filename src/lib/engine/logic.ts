@@ -12,13 +12,71 @@ export const ERROR_CLASS_LABELS: Record<ErrorClass, string> = {
   unknown: "Unknown",
 };
 
-/** Replaces {{path}} placeholders with values from the run data. Missing values become empty strings. */
-export function fillTemplate(template: string, data: Record<string, unknown>): string {
-  return template.replace(/\{\{\s*([\w.[\]]+)\s*\}\}/g, (_, p: string) => {
+/**
+ * Builds the run context from a trigger payload. Payload fields are also exposed at the top level for
+ * {{field}} templates, but never under names the engine owns: `trigger` (the snapshot used for
+ * required-field checks and re-runs), `steps` (step outputs) and `__*` (loop/idempotency state).
+ */
+export function runContextFrom(input: Record<string, unknown>): Record<string, unknown> {
+  const fields = Object.fromEntries(Object.entries(input).filter(([k]) => k !== "trigger" && k !== "steps" && !k.startsWith("__")));
+  return { ...fields, trigger: input, steps: {} };
+}
+
+const PLACEHOLDER = /\{\{\s*([\w.[\]]+)\s*\}\}/g;
+
+/**
+ * Replaces {{path}} placeholders with values from the run data. Missing values become empty strings.
+ * `encode` is applied to each inserted value (e.g. encodeURIComponent for URLs) so run data can't change
+ * the surrounding structure.
+ */
+export function fillTemplate(template: string, data: Record<string, unknown>, encode: (s: string) => string = (s) => s): string {
+  return template.replace(PLACEHOLDER, (_, p: string) => {
     const v = getPath(data, p);
     if (v === undefined || v === null) return "";
-    return typeof v === "object" ? JSON.stringify(v) : String(v);
+    return encode(typeof v === "object" ? JSON.stringify(v) : String(v));
   });
+}
+
+const JSON_LITERAL = /^(-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?|true|false|null)$/;
+
+/**
+ * Fills a JSON body template so run data can never break out of the value it was placed in.
+ * Inside a JSON string ("note": "{{note}}") the value is JSON-string-escaped. As a bare value
+ * ("amount": {{amount}}) it is inserted as a JSON value: numbers/booleans/null keep their type,
+ * anything else becomes a quoted string, objects and arrays become their JSON.
+ */
+export function fillJsonTemplate(template: string, data: Record<string, unknown>): string {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < template.length; ) {
+    PLACEHOLDER.lastIndex = i;
+    const m = template.startsWith("{{", i) ? PLACEHOLDER.exec(template) : null;
+    if (m && m.index === i) {
+      const v = getPath(data, m[1]!);
+      if (inString) {
+        const s = v === undefined || v === null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+        out += JSON.stringify(s).slice(1, -1);
+      } else if (v === undefined || v === null) {
+        out += "null";
+      } else if (typeof v === "string") {
+        out += JSON_LITERAL.test(v.trim()) ? v.trim() : JSON.stringify(v);
+      } else {
+        out += JSON.stringify(v);
+      }
+      i += m[0].length;
+      continue;
+    }
+    const ch = template[i]!;
+    if (ch === "\\" && inString) {
+      out += template.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+    out += ch;
+    i += 1;
+  }
+  return out;
 }
 
 /**

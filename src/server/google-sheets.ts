@@ -1,5 +1,5 @@
 import "server-only";
-import { createSign } from "node:crypto";
+import { createHash, createSign } from "node:crypto";
 
 /**
  * Google Sheets via a service account (no OAuth consent screen needed).
@@ -39,9 +39,15 @@ export function spreadsheetIdFrom(input: string): string | null {
 
 const tokens = new Map<string, { token: string; exp: number }>();
 const b64url = (s: string | Buffer) => Buffer.from(s).toString("base64url");
+/**
+ * Cache key bound to the private key itself, not just the (public) client_email: otherwise anyone who
+ * pastes another tenant's client_email with a dummy key would be handed that tenant's cached token.
+ */
+const cacheKey = (sa: ServiceAccount) => createHash("sha256").update(sa.client_email).update("\0").update(sa.private_key).digest("hex");
 
 async function accessToken(sa: ServiceAccount, timeoutMs: number): Promise<string> {
-  const cached = tokens.get(sa.client_email);
+  const key = cacheKey(sa);
+  const cached = tokens.get(key);
   if (cached && cached.exp > Date.now() + 60_000) return cached.token;
   const now = Math.floor(Date.now() / 1000);
   const unsigned = `${b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64url(JSON.stringify({ iss: sa.client_email, scope: SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 }))}`;
@@ -54,7 +60,7 @@ async function accessToken(sa: ServiceAccount, timeoutMs: number): Promise<strin
   const res = await google(TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${signature}` }).toString() }, timeoutMs);
   const j = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !j.access_token) throw fail({ code: "SHEETS_AUTH_FAILED", message: `Google rejected the service account: ${j.error_description ?? res.status}. The key may have been deleted — create a new one.`, errorClass: "permission", retryable: false });
-  tokens.set(sa.client_email, { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 });
+  tokens.set(key, { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 });
   return j.access_token;
 }
 

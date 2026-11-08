@@ -138,7 +138,7 @@ function KindFields({ node, cfg, err, connections, webhooks, workflowId }: { nod
           <Fieldset legend="Starts when">
             <RadioGroup value={c.triggerType} onValueChange={(v) => cfg(v === "schedule" && !c.schedule ? { triggerType: v, schedule: defaultSchedule(workspace?.settings.timezone || "UTC") } : { triggerType: v })}>
               <RadioCard id={`${node.id}-t-webhook`} value="webhook" label="A signed webhook is received" description="HMAC-SHA256 signature, timestamp and replay window are verified." />
-              <RadioCard id={`${node.id}-t-manual`} value="manual" label="Someone runs it manually" description="From FlowForge or POST /workflows/:id/runs." />
+              <RadioCard id={`${node.id}-t-manual`} value="manual" label="Someone runs it manually" description="From Brightrail or POST /workflows/:id/runs." />
               <RadioCard id={`${node.id}-t-schedule`} value="schedule" label="On a schedule" description="Every few minutes, daily, weekly, monthly or a cron expression." />
             </RadioGroup>
           </Fieldset>

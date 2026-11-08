@@ -29,6 +29,7 @@ import type { WebhookListItem } from "@/lib/services/types";
 const DELIVERY_META: Record<WebhookDelivery["status"], { label: string; tone: "success" | "neutral" | "danger" | "warning" }> = {
   accepted: { label: "Accepted", tone: "success" }, duplicate: { label: "Duplicate (idempotent)", tone: "neutral" }, rejected_signature: { label: "Bad signature", tone: "danger" },
   rejected_replay: { label: "Outside replay window", tone: "danger" }, rejected_size: { label: "Body too large", tone: "warning" }, rejected_rate: { label: "Rate limited", tone: "warning" },
+  not_started: { label: "Not started (workflow paused or quota reached)", tone: "warning" },
 };
 const REPLAY_OPTIONS = [{ value: "60", label: "1 minute" }, { value: "300", label: "5 minutes (recommended)" }, { value: "600", label: "10 minutes" }, { value: "900", label: "15 minutes" }];
 
@@ -105,12 +106,12 @@ export function WebhookList() {
   );
 }
 
-const VERIFY_SNIPPET = `// Verify a FlowForge delivery (Node.js)
-const ts = req.headers["x-flowforge-timestamp"];
-const sig = req.headers["x-flowforge-signature"]; // "sha256=<hex>"
+const VERIFY_SNIPPET = `// Verify a Brightrail delivery (Node.js)
+const ts = req.headers["x-brightrail-timestamp"];
+const sig = req.headers["x-brightrail-signature"]; // "sha256=<hex>"
 if (Math.abs(Date.now() / 1000 - Number(ts)) > REPLAY_WINDOW) reject();
 const expected = "sha256=" + crypto
-  .createHmac("sha256", process.env.FLOWFORGE_SIGNING_SECRET)
+  .createHmac("sha256", process.env.BRIGHTRAIL_SIGNING_SECRET)
   .update(ts + "." + rawBody)
   .digest("hex");
 if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) reject();`;
@@ -121,14 +122,14 @@ export function WebhookDetail({ id }: { id: string }) {
   const { can } = useCurrent();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["webhook", ws, id], queryFn: () => webhooksApi.get(id) });
-  const [form, setForm] = React.useState({ name: "", status: "active" as "active" | "disabled", replay: "300", maxBodyKb: 256, rate: 120, verification: "hmac" as "hmac" | "url_key" });
+  const [form, setForm] = React.useState({ name: "", status: "active" as "active" | "disabled", replay: "300", maxBodyKb: 256, rate: 120, verification: "hmac" as "hmac" | "url_key", headerKeyOnly: false });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [rotateOpen, setRotateOpen] = React.useState(false);
   const [secret, setSecret] = React.useState<{ value: string; hint: string; link?: string } | null>(null);
   const [modeConfirm, setModeConfirm] = React.useState(false);
   // Copy saved settings into the form whenever they change on the server.
-  useOnChange(q.data?.endpoint, (e) => { if (e) setForm({ name: e.name, status: e.status, replay: String(e.replayWindowSec), maxBodyKb: e.maxBodyKb, rate: e.rateLimitPerMin, verification: e.verification }); });
-  const save = useMutation({ mutationFn: () => webhooksApi.update(id, { name: form.name, status: form.status, replayWindowSec: Number(form.replay), maxBodyKb: form.maxBodyKb, rateLimitPerMin: form.rate, verification: form.verification }), onSuccess: async (r) => { await qc.invalidateQueries(); setModeConfirm(false); if (r.secret) setSecret(r.secret); toast.success("Webhook settings saved"); }, onError: (e) => { if (e instanceof ApiError && e.fieldErrors) setErrors(e.fieldErrors); else toast.error(errorMessage(e)); } });
+  useOnChange(q.data?.endpoint, (e) => { if (e) setForm({ name: e.name, status: e.status, replay: String(e.replayWindowSec), maxBodyKb: e.maxBodyKb, rate: e.rateLimitPerMin, verification: e.verification, headerKeyOnly: e.headerKeyOnly }); });
+  const save = useMutation({ mutationFn: () => webhooksApi.update(id, { name: form.name, status: form.status, replayWindowSec: Number(form.replay), maxBodyKb: form.maxBodyKb, rateLimitPerMin: form.rate, verification: form.verification, headerKeyOnly: form.headerKeyOnly }), onSuccess: async (r) => { await qc.invalidateQueries(); setModeConfirm(false); if (r.secret) setSecret(r.secret); toast.success("Webhook settings saved"); }, onError: (e) => { if (e instanceof ApiError && e.fieldErrors) setErrors(e.fieldErrors); else toast.error(errorMessage(e)); } });
   const rotate = useMutation({ mutationFn: () => webhooksApi.rotateSecret(id), onSuccess: async (s) => { await qc.invalidateQueries(); setRotateOpen(false); setSecret(s); } });
   const test = useMutation({ mutationFn: async () => webhooksApi.sendTestEvent(id, await workflowsApi.sampleInput(q.data!.endpoint.workflowId)), onSuccess: async (d) => { await qc.invalidateQueries(); if (d.runId) toast.success("Test event accepted", { description: `Run ${d.runId} started.`, action: { label: "Open run", onClick: () => router.push(`/executions/${d.runId}`) } }); else toast.error("Test event rejected", { description: `HTTP ${d.httpStatus}. ${d.httpStatus === 409 ? "Publish the workflow and make sure it is active." : "The endpoint is disabled."}` }); }, onError: (e) => toast.error(errorMessage(e)) });
 
@@ -191,6 +192,7 @@ export function WebhookDetail({ id }: { id: string }) {
                 <Field label="Sender proves it's genuine with" description={form.verification !== e.verification ? "Saving issues a new secret; the current one stops working." : undefined}>
                   {(p) => <Select {...p} value={form.verification} onValueChange={(x) => setForm({ ...form, verification: x as "hmac" | "url_key" })} options={[{ value: "url_key", label: "Secret link (form tools, no-code apps)" }, { value: "hmac", label: "Signed requests (your own code)" }]} />}
                 </Field>
+                {form.verification === "url_key" && <SwitchField id="wh-header-only" label="Only accept the key in a header" description="Reject keys sent in the link (?key=…), which can end up in logs. Turn this on if your sender can set the X-Brightrail-Key header." checked={form.headerKeyOnly} onCheckedChange={(c) => setForm({ ...form, headerKeyOnly: c })} />}
                 <Field label="Replay window" error={errors.replayWindowSec}>{(p) => <Select {...p} value={form.replay} onValueChange={(x) => setForm({ ...form, replay: x })} options={REPLAY_OPTIONS} />}</Field>
                 <Field label="Max body size (KB)" error={errors.maxBodyKb}>{(p) => <Input {...p} type="number" min={1} max={1024} value={form.maxBodyKb} onChange={(x) => setForm({ ...form, maxBodyKb: Number(x.target.value) })} />}</Field>
                 <Field label="Rate limit (per minute)" error={errors.rate}>{(p) => <Input {...p} type="number" min={1} max={6000} value={form.rate} onChange={(x) => setForm({ ...form, rate: Number(x.target.value) })} />}</Field>

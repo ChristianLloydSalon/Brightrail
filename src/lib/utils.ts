@@ -70,3 +70,12 @@ export function sleep(ms: number) {
 export function pluralize(n: number, one: string, many = `${one}s`) {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
+
+/** The app's own host for display (e.g. "app.example.com"), from NEXT_PUBLIC_APP_URL. */
+export function appHost(): string {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").host;
+  } catch {
+    return "localhost:3000";
+  }
+}

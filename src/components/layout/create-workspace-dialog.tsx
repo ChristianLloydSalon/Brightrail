@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { appHost } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ export function CreateWorkspaceForm({ onCreated, footer }: { onCreated: () => vo
       }}
     >
       <DialogBody className="flex flex-col gap-4">
-        <Field label="Workspace name" required error={error} description={name.trim() ? `URL: flowforge.app/${slugify(name) || "workspace"}` : "Usually your company or team name."}>
+        <Field label="Workspace name" required error={error} description={name.trim() ? `URL: ${appHost()}/${slugify(name) || "workspace"}` : "Usually your company or team name."}>
           {(p) => <Input {...p} value={name} onChange={(e) => setName(e.target.value)} autoComplete="organization" placeholder="Acme Operations" autoFocus />}
         </Field>
         <p className="text-sm text-fg-muted">Each workspace is isolated: workflows, runs, connections and members are never shared across workspaces.</p>

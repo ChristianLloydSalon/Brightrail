@@ -1,4 +1,4 @@
-// Checks WCAG 2.2 contrast for every text/background token pair FlowForge uses.
+// Checks WCAG 2.2 contrast for every text/background token pair Brightrail uses.
 // Usage: node scripts/check-contrast.mjs   (exits 1 on failure)
 import { readFileSync } from "node:fs";
 

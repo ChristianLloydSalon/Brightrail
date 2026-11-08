@@ -41,7 +41,7 @@ function Progress({ step }: { step: number }) {
 function HowItWorks() {
   const items = [
     { icon: Zap, title: "Something happens", text: "A form is submitted, someone signs up, or you click Run." },
-    { icon: MousePointerClick, title: "FlowForge does the steps", text: "Post to Slack, send an email, call an API — in the order you draw." },
+    { icon: MousePointerClick, title: "Brightrail does the steps", text: "Post to Slack, send an email, call an API — in the order you draw." },
     { icon: Eye, title: "You can see every run", text: "If a step fails, it retries safely. The AI assistant explains what went wrong and you decide the fix." },
   ];
   return (
@@ -126,7 +126,7 @@ export function OnboardingWizard() {
           <section aria-labelledby="ob-h" className="flex flex-col gap-6">
             <div>
               <h1 id="ob-h" ref={headingRef} tabIndex={-1} className="text-3xl font-semibold tracking-tight outline-none">Welcome{firstName ? `, ${firstName}` : ""} <span aria-hidden>👋</span></h1>
-              <p className="mt-2 text-md text-fg-muted">FlowForge runs your repetitive tasks for you, and tells you clearly when something needs attention. Setup takes about two minutes.</p>
+              <p className="mt-2 text-md text-fg-muted">Brightrail runs your repetitive tasks for you, and tells you clearly when something needs attention. Setup takes about two minutes.</p>
             </div>
             <HowItWorks />
             {invitations.length > 0 && (
@@ -249,7 +249,7 @@ export function OnboardingWizard() {
             </div>
             <ol className="flex flex-col gap-3">
               {[
-                { icon: Zap, title: "Connect the app your workflow uses", text: template.needs.length ? `For this starter: ${template.needs.join(", ")}. Go to Integrations → choose the app → Add connection.` : "Go to Integrations and add the apps you want FlowForge to use." },
+                { icon: Zap, title: "Connect the app your workflow uses", text: template.needs.length ? `For this starter: ${template.needs.join(", ")}. Go to Integrations → choose the app → Add connection.` : "Go to Integrations and add the apps you want Brightrail to use." },
                 { icon: MousePointerClick, title: "Open the workflow and pick the connection", text: "Steps with something missing are outlined in red with a plain explanation." },
                 { icon: Sparkles, title: "Publish, then run it", text: "Publishing makes it live. Click Run now to try it, or create a webhook so other apps can start it." },
                 { icon: History, title: "Watch it in Executions", text: "Every step shows what went in and out. If something fails, ask the AI assistant for help." },

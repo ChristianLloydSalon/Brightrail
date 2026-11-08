@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { authEmailsEnabled, callbackLink, sendEmail, throttleAuthEmail } from "../auth-emails";
+import { authEmailsEnabled, bindLinkToThisBrowser, callbackLink, sendEmail, throttleAuthEmail } from "../auth-emails";
 import { validateEmail, validateNewPassword } from "@/lib/validators";
 import { PLANS } from "@/lib/domain/plans";
 import { env } from "../env";
@@ -17,7 +17,7 @@ import { adminClient } from "../supabase";
 
 export interface MeInfo {
   user: { id: string; email: string; name: string; title?: string; onboardingCompletedAt: string | null; notificationPrefs: NotificationPrefs };
-  /** Whether FlowForge can send notification emails (RESEND_API_KEY + EMAIL_FROM set). */
+  /** Whether Brightrail can send notification emails (RESEND_API_KEY + EMAIL_FROM set). */
   emailNotificationsAvailable: boolean;
   workspaces: Array<Workspace & { role: Role }>;
   activeWorkspaceId: string | null;
@@ -45,7 +45,15 @@ export async function authOptions() {
   });
 }
 
+/** Missing configuration. Open to anyone only on a fresh install; once Supabase is set up, sign-in is required. */
 export async function setupStatus() {
+  if (env.supabaseUrl && env.supabaseAnonKey) {
+    try {
+      await getSessionUser();
+    } catch {
+      return { missing: [] as string[] };
+    }
+  }
   return { missing: missingConfig() };
 }
 
@@ -124,6 +132,12 @@ export async function acceptInvitation(memberId: string) {
     const db = adminClient();
     const { data: m } = await db.from("workspace_members").select("*, workspaces(name)").eq("id", memberId).eq("user_id", user.id).eq("status", "invited").maybeSingle();
     if (!m) throw new ApiError("NOT_FOUND", "This invitation is no longer available.");
+    // Only someone who has proven they own the invited address may accept: otherwise anyone could
+    // register an invitee's email first (when email confirmation is off) and take the invitation.
+    const { data: auth } = await db.auth.admin.getUserById(user.id);
+    const confirmedEmail = auth.user?.email_confirmed_at ? auth.user.email?.toLowerCase() : null;
+    if (!confirmedEmail || confirmedEmail !== String(m.email).toLowerCase())
+      throw new ApiError("FORBIDDEN", "Confirm the email address this invitation was sent to, then try again.");
     const now = new Date().toISOString();
     await db.from("workspace_members").update({ status: "active", joined_at: now, last_active_at: now, name: user.name }).eq("id", memberId);
     await db.from("audit_events").insert({ workspace_id: m.workspace_id, actor: { type: "user", id: user.id, name: user.name }, action: "member.joined", category: "member", resource_type: "member", resource_id: memberId, resource_name: user.email, metadata: { role: m.role } });
@@ -205,7 +219,7 @@ export async function deleteAccount(confirmEmail: string) {
     const { data: memberships } = await db.from("workspace_members").select("id, workspace_id").eq("user_id", user.id);
     for (const m of memberships ?? []) {
       if (solo.has(m.workspace_id)) continue;
-      const { data: owner } = await db.from("workspace_members").select("user_id").eq("workspace_id", m.workspace_id).eq("role", "owner").eq("status", "active").maybeSingle();
+      const { data: owner } = await db.from("workspace_members").select("user_id").eq("workspace_id", m.workspace_id).eq("role", "owner").eq("status", "active").order("joined_at").limit(1).maybeSingle();
       if (owner?.user_id) await db.from("workflows").update({ owner_id: owner.user_id }).eq("workspace_id", m.workspace_id).eq("owner_id", user.id);
       await db.from("api_keys").update({ status: "revoked" }).eq("workspace_id", m.workspace_id).eq("created_by", user.id).eq("status", "active");
       await db.from("audit_events").insert({ workspace_id: m.workspace_id, actor: { type: "user", id: user.id, name: user.name }, action: "member.account_deleted", category: "member", resource_type: "member", resource_id: m.id, resource_name: user.email, metadata: { workflowsReassigned: true, apiKeysRevoked: true } });
@@ -213,7 +227,7 @@ export async function deleteAccount(confirmEmail: string) {
     // Delete the user first: if that fails, their solo workspaces are still intact.
     const { error } = await db.auth.admin.deleteUser(user.id);
     if (error) {
-      console.error("[flowforge] deleteUser failed", error.message);
+      console.error("[brightrail] deleteUser failed", error.message);
       if (/database error/i.test(error.message)) throw new ApiError("NOT_CONFIGURED", "Couldn't delete your account: the database still links records to it. Run supabase/migrations/0006_accounts_webhooks_plans.sql, then try again.");
       throw dbError({ code: (error as { code?: string }).code, message: error.message }, "delete your account");
     }
@@ -223,7 +237,7 @@ export async function deleteAccount(confirmEmail: string) {
   });
 }
 
-/* ---------------- auth emails through FlowForge's Resend key ---------------- */
+/* ---------------- auth emails through Brightrail's Resend key ---------------- */
 
 /** Whether the browser should use the server-side sign-up/reset below (true when Resend is configured). */
 export async function authEmailMode() {
@@ -232,7 +246,7 @@ export async function authEmailMode() {
 
 /**
  * Sign-up with the confirmation email sent through Resend. The response is the same whether or not the
- * email already has an account, so the form can't be used to discover who uses FlowForge; an existing
+ * email already has an account, so the form can't be used to discover who uses Brightrail; an existing
  * person gets a "you already have an account" email instead.
  */
 export async function signUpWithEmail(input: { name: string; email: string; password: string }) {
@@ -242,6 +256,9 @@ export async function signUpWithEmail(input: { name: string; email: string; pass
     const name = input.name.trim();
     const errors: Record<string, string> = {};
     if (name.length < 2) errors.name = "Enter your name.";
+    // The name goes into an email sent to the address given, so keep it short and free of links.
+    else if (name.length > 80) errors.name = "Use 80 characters or fewer.";
+    else if (/https?:|www\.|[<>]|\.[a-z]{2,}\//i.test(name)) errors.name = "Enter just your name, without links.";
     const emailErr = validateEmail(email);
     const pwErr = validateNewPassword(input.password);
     if (emailErr) errors.email = emailErr;
@@ -250,21 +267,27 @@ export async function signUpWithEmail(input: { name: string; email: string; pass
     await throttleAuthEmail("signup", email);
 
     const db = adminClient();
+    const binding = await bindLinkToThisBrowser();
     const { data, error } = await db.auth.admin.generateLink({ type: "signup", email, password: input.password, options: { data: { name }, redirectTo: `${env.appUrl}/auth/callback?next=/onboarding` } });
     if (error) {
       if (/already|exists|registered/i.test(error.message)) {
         const { data: rec } = await db.auth.admin.generateLink({ type: "recovery", email });
-        await sendEmail(email, "You already have a FlowForge account", ["Someone (hopefully you) tried to create a FlowForge account with this email address, but you already have one.", "Sign in as usual, or use the button below to choose a new password."],
-          { label: "Reset my password", url: rec?.properties?.hashed_token ? callbackLink(rec.properties.hashed_token, "recovery") : `${env.appUrl}/forgot-password` }, `exists-${email}-${Math.floor(Date.now() / 600_000)}`);
+        await sendEmail(email, "You already have a Brightrail account", ["Someone (hopefully you) tried to create a Brightrail account with this email address, but you already have one.", "Sign in as usual, or use the button below to choose a new password."],
+          { label: "Reset my password", url: rec?.properties?.hashed_token ? callbackLink(rec.properties.hashed_token, "recovery", undefined, binding) : `${env.appUrl}/forgot-password` }, `exists-${email}-${Math.floor(Date.now() / 600_000)}`);
         return { needsConfirmation: true };
       }
-      console.error("[flowforge] generateLink(signup) failed", error.message);
+      console.error("[brightrail] generateLink(signup) failed", error.message);
       throw new ApiError("INTERNAL", "Couldn't create the account. Try again in a minute.");
     }
-    // Projects with "Confirm email" turned off confirm immediately; the browser then signs in.
-    if (data.user?.email_confirmed_at) return { needsConfirmation: false };
-    await sendEmail(email, "Confirm your FlowForge account", [`Hi ${name.split(" ")[0]},`, "Confirm your email address to finish creating your FlowForge account. The link works for one hour."],
-      { label: "Confirm my email", url: callbackLink(data.properties.hashed_token, "signup", "/onboarding") }, `signup-${data.user?.id}-${data.properties.hashed_token.slice(0, 12)}`);
+    // Projects with "Confirm email" turned off confirm immediately. Answer exactly as for an existing
+    // address (and still send an email), so the response never reveals whether an account existed.
+    if (data.user?.email_confirmed_at) {
+      await sendEmail(email, "Your Brightrail account is ready", [`Hi ${name.split(" ")[0]},`, "Your Brightrail account has been created. Sign in with the email and password you chose."],
+        { label: "Sign in to Brightrail", url: `${env.appUrl}/sign-in` }, `welcome-${data.user.id}`);
+      return { needsConfirmation: true };
+    }
+    await sendEmail(email, "Confirm your Brightrail account", [`Hi ${name.split(" ")[0]},`, "Confirm your email address to finish creating your Brightrail account. The link works for one hour."],
+      { label: "Confirm my email", url: callbackLink(data.properties.hashed_token, "signup", "/onboarding", binding) }, `signup-${data.user?.id}-${data.properties.hashed_token.slice(0, 12)}`);
     return { needsConfirmation: true };
   });
 }
@@ -277,10 +300,11 @@ export async function requestPasswordResetEmail(emailInput: string) {
     const emailErr = validateEmail(email);
     if (emailErr) throw new ApiError("VALIDATION", "Check the highlighted fields.", { email: emailErr });
     await throttleAuthEmail("recovery", email);
+    const binding = await bindLinkToThisBrowser();
     const { data, error } = await adminClient().auth.admin.generateLink({ type: "recovery", email });
     if (!error && data.properties?.hashed_token) {
-      await sendEmail(email, "Reset your FlowForge password", ["We received a request to reset the password for your FlowForge account.", "Use the button below to choose a new one. The link works for one hour and can be used once."],
-        { label: "Choose a new password", url: callbackLink(data.properties.hashed_token, "recovery") }, `recovery-${data.user?.id}-${data.properties.hashed_token.slice(0, 12)}`);
+      await sendEmail(email, "Reset your Brightrail password", ["We received a request to reset the password for your Brightrail account.", "Use the button below to choose a new one. The link works for one hour and can be used once."],
+        { label: "Choose a new password", url: callbackLink(data.properties.hashed_token, "recovery", undefined, binding) }, `recovery-${data.user?.id}-${data.properties.hashed_token.slice(0, 12)}`);
     }
     return { sent: true as const };
   });

@@ -1,4 +1,4 @@
--- FlowForge: explicit table permissions.
+-- Brightrail: explicit table permissions.
 --
 -- Supabase no longer grants API roles access to new tables automatically (new projects since
 -- 30 May 2026, all projects from 30 Oct 2026). Without these grants the server gets
@@ -6,7 +6,7 @@
 --
 -- Run AFTER 0001_init.sql and 0002_live_limits_reads.sql. Safe to run more than once.
 --
---   service_role   (FlowForge server only)  → full read/write; it checks roles in code first.
+--   service_role   (Brightrail server only)  → full read/write; it checks roles in code first.
 --   authenticated  (signed-in browser)       → read-only, and RLS limits rows to the member's workspaces.
 --                                              Needed for Realtime live updates. Secret tables get nothing.
 --   anon           (signed-out browser)      → nothing.

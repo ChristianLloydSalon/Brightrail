@@ -1,4 +1,4 @@
--- FlowForge: account deletion, secret-link webhooks, social sign-in names.
+-- Brightrail: account deletion, secret-link webhooks, social sign-in names.
 -- Run AFTER 0001–0005. Safe to run more than once.
 
 -- ---------------------------------------------------------------- account deletion

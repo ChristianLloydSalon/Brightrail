@@ -56,6 +56,7 @@ export async function telegramTest(token: string, chatId: string) {
 }
 
 export async function telegramSend(token: string, chatId: string, text: string, timeoutMs: number) {
+  if (!TG_TOKEN.test(token.trim())) throw fail({ code: "TELEGRAM_BAD_TOKEN", message: "The connection's bot token isn't valid. Rotate it with the token from @BotFather.", errorClass: "configuration", retryable: false });
   if (!text.trim()) throw fail({ code: "VALIDATION_EMPTY_MESSAGE", message: "Map a “text” input for the message.", errorClass: "validation", retryable: false });
   const r = (await call("Telegram", tg(token.trim(), "sendMessage"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId.trim(), text: text.slice(0, MAX_TEXT), disable_web_page_preview: true }) }, timeoutMs)).body as { result?: { message_id?: number } };
   return { messageId: r.result?.message_id ?? null };
@@ -149,7 +150,7 @@ function notionValue(type: string, name: string, v: unknown): unknown {
     case "email": return { email: s || null };
     case "phone_number": return { phone_number: s || null };
     default:
-      throw fail({ code: "NOTION_UNSUPPORTED", message: `Notion column “${name}” is a ${type.replace(/_/g, " ")} column, which can't be filled from FlowForge. Supported: title, text, number, select, multi-select, status, checkbox, date, URL, email, phone.`, errorClass: "configuration", retryable: false });
+      throw fail({ code: "NOTION_UNSUPPORTED", message: `Notion column “${name}” is a ${type.replace(/_/g, " ")} column, which can't be filled from Brightrail. Supported: title, text, number, select, multi-select, status, checkbox, date, URL, email, phone.`, errorClass: "configuration", retryable: false });
   }
 }
 

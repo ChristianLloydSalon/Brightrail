@@ -20,7 +20,7 @@ export function OneTimeSecretDialog({ open, title, secret, onClose, hint, note }
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && ack) onClose(); }}>
       <DialogContent size="md" hideClose onEscapeKeyDown={(e) => { if (!ack) e.preventDefault(); }} onPointerDownOutside={(e) => e.preventDefault()}>
-        <DialogHeader title={title} description="Copy it now and store it in your secret manager. FlowForge won't show it again." />
+        <DialogHeader title={title} description="Copy it now and store it in your secret manager. Brightrail won't show it again." />
         <DialogBody className="flex flex-col gap-4">
           <Alert tone="warning"><ShieldAlert className="hidden" aria-hidden />Anyone with this value can act with its permissions. Don't paste it into chat, tickets or code.</Alert>
           <div className="flex items-center gap-2 rounded-md border border-border bg-surface-sunken p-2">

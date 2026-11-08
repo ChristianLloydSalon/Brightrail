@@ -73,7 +73,11 @@ export function ApprovalCard({ approval, showRunLink }: { approval: ApprovalRequ
         </div>
         <StatusBadge meta={APPROVAL_STATUS_META[approval.status]} />
       </div>
-      <p className="text-base">{approval.rationale}</p>
+      <div className="flex flex-col gap-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">AI-written summary</p>
+        <p className="text-base">{approval.rationale}</p>
+        <p className="text-sm text-fg-muted">Written by the assistant from the run's error details, which can include text from outside services. Check the run log before approving.</p>
+      </div>
       <CodeBlock code={`${approval.toolCall.name}(${Object.entries(approval.toolCall.args).map(([k, v]) => `${k}="${v}"`).join(", ")})`} />
       {approval.status === "pending" ? (
         <>

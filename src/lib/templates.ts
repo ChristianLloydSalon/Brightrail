@@ -25,7 +25,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
   {
     id: "form-to-slack",
     name: "Tell my team in Slack about new form submissions",
-    pitch: "When your website form sends an event, FlowForge posts a message to a Slack channel.",
+    pitch: "When your website form sends an event, Brightrail posts a message to a Slack channel.",
     steps: ["A form submission arrives", "Post it to Slack"],
     needs: ["A Slack incoming-webhook URL"],
     trigger: "webhook",
@@ -58,7 +58,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
   {
     id: "api-to-discord",
     name: "Check an API and post the result to Discord",
-    pitch: "Run it whenever you like: FlowForge calls a public API and posts a summary to Discord.",
+    pitch: "Run it whenever you like: Brightrail calls a public API and posts a summary to Discord.",
     steps: ["You click Run", "Call the GitHub API", "Post the star count to Discord"],
     needs: ["A Discord webhook URL"],
     trigger: "manual",
