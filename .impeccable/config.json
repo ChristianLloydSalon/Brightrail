@@ -1,0 +1,65 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-08T04:05:38.715Z",
+        "reason": "agent decision: Geist and Geist Mono are Brightrail's incumbent brand faces, pinned in DESIGN_SYSTEM.md section 3"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "createdAt": "2026-11-08T04:05:39.044Z",
+        "reason": "agent decision: Geist and Geist Mono are Brightrail's incumbent brand faces, pinned in DESIGN_SYSTEM.md section 3"
+      },
+      {
+        "rule": "oversized-h1",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/rail-line.html"
+        ],
+        "createdAt": "2026-11-08T04:05:39.414Z",
+        "reason": "agent decision: spent decision-round sketch (fixed 1440x900 thumbnail for the structure choice), never shipped"
+      },
+      {
+        "rule": "skipped-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/rail-line.html"
+        ],
+        "createdAt": "2026-11-08T04:05:39.785Z",
+        "reason": "agent decision: spent decision-round sketch (fixed 1440x900 thumbnail for the structure choice), never shipped"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/rail-line.html"
+        ],
+        "createdAt": "2026-11-08T04:05:40.145Z",
+        "reason": "agent decision: spent decision-round sketch (fixed 1440x900 thumbnail for the structure choice), never shipped"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/incident-log.html"
+        ],
+        "createdAt": "2026-11-08T04:05:40.491Z",
+        "reason": "agent decision: spent decision-round sketch (fixed 1440x900 thumbnail for the structure choice), never shipped"
+      },
+      {
+        "rule": "oversized-h1",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/incident-log.html"
+        ],
+        "createdAt": "2026-11-08T04:05:40.855Z",
+        "reason": "agent decision: spent decision-round sketch (fixed 1440x900 thumbnail for the structure choice), never shipped"
+      }
+    ]
+  }
+}

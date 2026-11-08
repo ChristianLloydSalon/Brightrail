@@ -1,0 +1,22 @@
+node_modules
+.next
+out
+test-results
+playwright-report
+*.tsbuildinfo
+next-env.d.ts
+.env
+_to_delete
+supabase/.temp
+.env*
+!.env.example
+*.pem
+*.key
+credentials*.json
+*-service-account*.json
+.vercel
+
+# Impeccable design-tool scratch output (screenshots, decision sketches, question payloads)
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/questions/

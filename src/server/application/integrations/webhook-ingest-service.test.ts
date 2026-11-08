@@ -1,0 +1,10 @@
+// @vitest-environment node
+import { describe, expect, it } from "vitest";
+import { formToObject } from "./webhook-ingest-service";
+
+describe("form-encoded webhook bodies", () => {
+  it("parses fields, repeats and encoding; drops prototype keys", () => {
+    expect(formToObject("name=Ada+Lovelace&email=ada%40example.com&tag=a&tag=b&__proto__=x&constructor=y")).toEqual({ name: "Ada Lovelace", email: "ada@example.com", tag: ["a", "b"] });
+    expect(Object.getPrototypeOf(formToObject("__proto__[admin]=1"))).toBe(Object.prototype);
+  });
+});

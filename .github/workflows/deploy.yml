@@ -1,0 +1,113 @@
+# Deploys Brightrail to Vercel production on every push to master:
+#   1. verify   - lint, typecheck, unit tests (nothing ships if these fail)
+#   2. migrate  - apply pending Supabase migrations to production (schema first, then code)
+#   3. deploy   - build with the Vercel CLI and deploy the prebuilt output to production
+#   4. sync     - tell Inngest about the new deployment so workflow runs reach it
+#
+# One-time setup. Repository settings → Environments → production:
+#   Secrets:   VERCEL_TOKEN           (vercel.com → Account Settings → Tokens)
+#              VERCEL_ORG_ID          (from .vercel/project.json after `vercel link`)
+#              VERCEL_PROJECT_ID      (from .vercel/project.json after `vercel link`)
+#              SUPABASE_ACCESS_TOKEN  (supabase.com → Account → Access tokens)
+#              SUPABASE_DB_PASSWORD   (the production database password)
+# Repository settings → Secrets and variables → Actions → Variables:
+#              SUPABASE_PROJECT_REF, APP_URL (e.g. https://brightrail.vercel.app)
+# The app's own environment variables (Supabase keys, encryption key, Inngest keys…) live in the
+# Vercel project (Settings → Environment Variables → Production); `vercel pull` fetches them for the build.
+# vercel.json turns off Vercel's own Git deploys, so only commits that passed this workflow go live.
+
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Never run two production deploys at once; a newer push waits for the current one to finish.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  migrate:
+    name: Apply database migrations
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link the production project
+        run: supabase link --project-ref "${{ vars.SUPABASE_PROJECT_REF }}"
+      - name: Show pending migrations
+        run: supabase migration list --linked
+      # --yes: CI can't answer the confirmation prompt. Only migrations not yet recorded in the
+      # database's migration history are applied (see the list printed by the previous step).
+      - name: Apply pending migrations
+        run: supabase db push --linked --yes
+
+  deploy:
+    name: Deploy to Vercel
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_CLI: vercel@65.12.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Pull production settings and environment variables
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: Build
+        run: npx --yes "$VERCEL_CLI" build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      - name: Deploy the prebuilt output
+        run: npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+  sync-inngest:
+    name: Sync Inngest
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A PUT makes the app register its functions with Inngest Cloud (signed with INNGEST_SIGNING_KEY).
+      - name: Register functions with Inngest
+        run: |
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${{ vars.APP_URL }}/api/inngest")
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Inngest sync failed; run Sync app in the Inngest dashboard." && exit 1
